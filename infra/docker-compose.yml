@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mcourses
+      POSTGRES_PASSWORD: mcourses
+      POSTGRES_DB: mcourses
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcourses"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # you'll run: `docker exec -it <ollama> ollama pull llama3` once
+
+  backend:
+    build: ../backend
+    depends_on:
+      - postgres
+      - minio
+      - redis
+    environment:
+      DATABASE_URL: postgresql+psycopg2://mcourses:mcourses@postgres:5432/mcourses
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+      MINIO_BUCKET: documents
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: ../worker
+    depends_on:
+      - backend
+      - redis
+      - postgres
+      - minio
+      - ollama
+    environment:
+      DATABASE_URL: postgresql+psycopg2://mcourses:mcourses@postgres:5432/mcourses
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+      MINIO_BUCKET: documents
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_HOST: http://ollama:11434
+
+volumes:
+  pgdata:
+  minio_data:
+  ollama_data:
