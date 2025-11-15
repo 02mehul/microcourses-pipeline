@@ -19,6 +19,62 @@ The system automatically:
 
 ---
 
+## 🚀 Quick Start
+
+### Using Docker (Recommended)
+
+The fastest way to get the entire system running:
+
+```bash
+# 1. Clone repository
+git clone <your-repo-url>
+cd microcourses-pipeline
+
+# 2. Start all services with Docker Compose
+cd infra
+docker-compose up --build
+
+# 3. Wait for services to be ready (~30-60 seconds)
+# Services will be available at:
+# - Backend API: http://localhost:8000
+# - API Documentation: http://localhost:8000/docs
+# - Frontend UI: http://localhost:3000
+# - MinIO Console: http://localhost:9001 (credentials: minio / minio123)
+
+# 4. Upload a PDF via the web interface
+# Open http://localhost:3000 in your browser
+# Or use curl:
+curl -X POST "http://localhost:8000/documents" \
+  -F "file=@example.pdf"
+
+# 5. View extracted content
+# The response will include a document_id
+# Navigate to: http://localhost:3000/documents/{document_id}
+```
+
+**What's Running:**
+- **Backend** (FastAPI) - Port 8000
+- **Frontend** (Next.js) - Port 3000
+- **PostgreSQL** - Port 5432
+- **MinIO** (S3-compatible storage) - Ports 9000, 9001
+- **Redis** - Port 6379
+- **Ollama** (LLM) - Port 11434
+
+**Stopping the system:**
+```bash
+cd infra
+docker-compose down
+```
+
+**Clean restart (removes all data):**
+```bash
+cd infra
+docker-compose down -v
+docker-compose up --build
+```
+
+---
+
 ## 🧩 Features
 
 ### 🔹 Core Pipeline
@@ -154,15 +210,34 @@ npm run dev
 
 Frontend runs on http://localhost:3000
 
-🌐 API Overview
-Endpoint	Method	Description
-/documents	POST	Upload a PDF
-/documents/{id}	GET	Get document status
-/documents/{id}/blocks	GET	List extracted text blocks
+## 🌐 API Overview
 
-Example upload (curl):
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/documents` | GET | List all documents (supports pagination & filtering) |
+| `/documents` | POST | Upload a PDF |
+| `/documents/{id}` | GET | Get document details with all extracted content |
+| `/documents/{id}/blocks` | GET | List extracted text blocks (flattened view) |
 
-curl -X POST "http://localhost:8000/documents" -F "file=@example.pdf"
+**Interactive API Documentation:** http://localhost:8000/docs
+
+### Example Usage
+
+**Upload a PDF:**
+```bash
+curl -X POST "http://localhost:8000/documents" \
+  -F "file=@example.pdf"
+```
+
+**List all documents:**
+```bash
+curl "http://localhost:8000/documents?limit=10&status=SUCCESS"
+```
+
+**Get document details:**
+```bash
+curl "http://localhost:8000/documents/1"
+```
 
 🧠 Summarization & Chunking (Planned Workflow)
 

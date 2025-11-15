@@ -51,3 +51,8 @@ class Block(Base):
     ocr_used = Column(Boolean, default=False)
 
     page = relationship("Page", back_populates="blocks")
+
+    @property
+    def page_number(self) -> int:
+        """Convenience property to get page number for API responses."""
+        return self.page.page_number if self.page else 0

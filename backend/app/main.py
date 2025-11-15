@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
-from .routes import documents
+from .routes import document
 
 # DEV ONLY: auto-create tables.
 Base.metadata.create_all(bind=engine)
@@ -23,4 +23,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(documents.router)
+app.include_router(document.router)
