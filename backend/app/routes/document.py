@@ -2,7 +2,7 @@ import hashlib
 import io
 from typing import List, Optional
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
@@ -65,18 +65,23 @@ def list_documents(
 
 @router.post("/", response_model=DocumentCreateResponse)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    allowed_extensions = {".pdf", ".docx"}
+    ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
 
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
 
     checksum = hashlib.md5(data).hexdigest()
-    key = f"pdf/{checksum}_{file.filename}"
+    # Store with correct extension
+    key = f"documents/{checksum}_{file.filename}"
 
     storage.upload_fileobj(io.BytesIO(data), key)
 
@@ -90,8 +95,8 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
 
-    # Run pipeline (sync for now)
-    process_document(db, doc.id)
+    # Run pipeline in background
+    background_tasks.add_task(process_document, doc.id)
 
     # Refresh to get updated status and created_at
     db.refresh(doc)
@@ -130,8 +135,12 @@ def get_blocks(document_id: int, db: Session = Depends(get_db)):
                 {
                     "page": p.page_number,
                     "type": b.type,
+                    "semantic_role": b.semantic_role,
+                    "hierarchy_level": b.hierarchy_level,
+                    "parent_block_id": b.parent_block_id,
                     "bbox": b.bbox,
                     "text": b.text_raw,
+                    "table_data": b.table_data,
                 }
             )
     return result

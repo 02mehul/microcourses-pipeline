@@ -51,6 +51,21 @@ class Block(Base):
     ocr_used = Column(Boolean, default=False)
 
     page = relationship("Page", back_populates="blocks")
+    parent = relationship("Block", remote_side=[id], backref="children")
+
+    # Semantic classification
+    semantic_role = Column(String, nullable=True)  # title, chapter_heading, paragraph, etc.
+    hierarchy_level = Column(Integer, nullable=True)  # 0=chapter, 1=section, etc.
+
+    # Relationships
+    parent_block_id = Column(Integer, ForeignKey("blocks.id"), nullable=True)
+    sequence_order = Column(Integer, nullable=True)
+
+    # Rich content
+    table_data = Column(JSON, nullable=True)
+    table_headers = Column(JSON, nullable=True)
+    image_path = Column(String, nullable=True)
+
 
     @property
     def page_number(self) -> int:

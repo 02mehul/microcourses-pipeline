@@ -59,6 +59,8 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
+    env_file:
+      - ../backend/.env
 
   worker:
     build:
@@ -78,6 +80,8 @@ services:
       MINIO_BUCKET: documents
       REDIS_URL: redis://redis:6379/0
       OLLAMA_HOST: http://ollama:11434
+    env_file:
+      - ../backend/.env
 
 volumes:
   pgdata:

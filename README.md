@@ -1,4 +1,5 @@
 📘 README.md
+
 # 🧠 Microcourses Pipeline
 
 An end-to-end system for automatically generating **multilingual digital micro-courses** from research articles (PDFs).  
@@ -11,6 +12,7 @@ This project extracts, standardizes, and summarizes content from academic papers
 The main goal of this course project is to simulate a **real-world software development process** where a team collaboratively designs and implements a complete application using **Python** and modern web technologies.
 
 The system automatically:
+
 1. Extracts **text**, **graphics**, and **tables** from uploaded PDFs.
 2. Converts the extracted data into a **standardized structured format**.
 3. Generates **expressive, learning-oriented summaries** using **LLM models (Ollama / Mistral)**.
@@ -53,6 +55,7 @@ curl -X POST "http://localhost:8000/documents" \
 ```
 
 **What's Running:**
+
 - **Backend** (FastAPI) - Port 8000
 - **Frontend** (Next.js) - Port 3000
 - **PostgreSQL** - Port 5432
@@ -61,12 +64,14 @@ curl -X POST "http://localhost:8000/documents" \
 - **Ollama** (LLM) - Port 11434
 
 **Stopping the system:**
+
 ```bash
 cd infra
 docker-compose down
 ```
 
 **Clean restart (removes all data):**
+
 ```bash
 cd infra
 docker-compose down -v
@@ -78,8 +83,9 @@ docker-compose up --build
 ## 🧩 Features
 
 ### 🔹 Core Pipeline
+
 - **PDF Upload:** Users can upload research articles via a web interface.
-- **Automatic Processing:** 
+- **Automatic Processing:**
   - Text extraction (with coordinates)
   - Table and figure detection (planned)
   - Metadata and layout parsing
@@ -89,11 +95,13 @@ docker-compose up --build
 - **Multilingual Support:** Can generate translated summaries or learning content (planned).
 
 ### 🔹 Web Interface
+
 - Simple **upload UI** built with **Next.js + Tailwind CSS**.
 - Displays processing status and extracted document structure.
 - Backend exposed via REST API (FastAPI).
 
 ### 🔹 Backend API
+
 - **FastAPI** application providing:
   - `/documents` → upload and manage documents
   - `/documents/{id}` → retrieve processing status
@@ -101,11 +109,13 @@ docker-compose up --build
 - Built-in **CORS** configuration for frontend compatibility.
 
 ### 🔹 Data Storage
+
 - **PostgreSQL** for structured metadata (documents, pages, blocks).
 - **MinIO / Supabase Storage** for PDF file storage.
 - Designed for **cloud compatibility** and containerized deployment.
 
 ### 🔹 Planned Enhancements
+
 - Automatic **table** and **graph** extraction.
 - **OCR integration** (Mistral OCR / Tesseract) for scanned documents.
 - Advanced summarization prompts for educational tone.
@@ -116,7 +126,7 @@ docker-compose up --build
 
 ## 🏗️ System Architecture
 
-```text
+````text
 ┌─────────────────────────────┐
 │         Frontend (Next.js)  │
 │  - Upload PDF               │
@@ -227,14 +237,16 @@ Frontend runs on http://localhost:3000
 ```bash
 curl -X POST "http://localhost:8000/documents" \
   -F "file=@example.pdf"
-```
+````
 
 **List all documents:**
+
 ```bash
 curl "http://localhost:8000/documents?limit=10&status=SUCCESS"
 ```
 
 **Get document details:**
+
 ```bash
 curl "http://localhost:8000/documents/1"
 ```
@@ -277,24 +289,24 @@ Future integration of Supabase can simplify deployment (Postgres + Storage + Aut
 microcourses/
 │
 ├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── db.py
-│   │   ├── config.py
-│   │   ├── models.py
-│   │   ├── routes/
-│   │   ├── services/
-│   │   └── schemas.py
-│   └── requirements.txt
+│ ├── app/
+│ │ ├── main.py
+│ │ ├── db.py
+│ │ ├── config.py
+│ │ ├── models.py
+│ │ ├── routes/
+│ │ ├── services/
+│ │ └── schemas.py
+│ └── requirements.txt
 │
 ├── frontend/
-│   ├── src/
-│   │   ├── app/
-│   │   │   └── upload/page.tsx
-│   │   └── components/
-│   ├── package.json
-│   └── tsconfig.json
+│ ├── src/
+│ │ ├── app/
+│ │ │ └── upload/page.tsx
+│ │ └── components/
+│ ├── package.json
+│ └── tsconfig.json
 │
-├── infra/        # Docker & deployment (planned)
-├── docs/         # Documentation, architecture notes
+├── infra/ # Docker & deployment (planned)
+├── docs/ # Documentation, architecture notes
 └── README.md

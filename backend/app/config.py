@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minio123"
     MINIO_BUCKET: str = "documents"
 
+    LLAMA_CLOUD_API_KEY: str = "llx-..."  # Set in .env
+
     class Config:
         # This is relative to the directory where you run uvicorn (backend/)
         env_file = ".env"

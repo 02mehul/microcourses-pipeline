@@ -1,118 +1,152 @@
 """
-PDF processing pipeline using PyMuPDF for text extraction.
+PDF processing pipeline using LlamaParse for text extraction and structure analysis.
 
 This module handles the core document processing workflow:
 1. Download PDF from MinIO storage
-2. Extract text blocks with bounding box coordinates
-3. Normalize coordinates to 0-1 range (resolution-independent)
-4. Store structured data in PostgreSQL
+2. Send to LlamaParse Cloud for extraction (Markdown + Images)
+3. Parse Markdown to identify semantic structure (Chapters, Sections)
+4. Store structured data in PostgreSQL with hierarchy
 """
 
 import logging
-import fitz  # PyMuPDF
+import os
+import tempfile
+import asyncio
 from sqlalchemy.orm import Session
 
-from .storage import download_bytes
+import io
+from .storage import download_bytes, upload_fileobj
 from ..models import Document, Page, Block
+from .llamaparse import LlamaParseService
+from .markdown_parser import MarkdownParser
+from .json_parser import JsonParser
+# from .image_handler import ImageHandler # Removed image handling
+from ..db import SessionLocal
 
 logger = logging.getLogger(__name__)
 
 
-def process_document(db: Session, document_id: int) -> None:
+async def process_document(document_id: int) -> None:
     """
-    Extract text blocks from uploaded PDF using PyMuPDF.
+    Extract structured content from uploaded PDF using LlamaParse.
 
     Process:
-    1. Download PDF from MinIO storage
-    2. Iterate through pages
-    3. Extract text blocks with bounding boxes
-    4. Normalize coordinates to 0-1 range (for layout preservation)
-    5. Store in PostgreSQL (Document → Page → Block hierarchy)
-
-    Args:
-        db: SQLAlchemy database session
-        document_id: ID of document to process
-
-    Side Effects:
-        - Updates document.status in database (PENDING → RUNNING → SUCCESS/FAILED)
-        - Creates Page and Block records
-        - Commits changes to database
+    1. Download PDF from MinIO
+    2. Upload to LlamaParse -> Get Markdown (per page)
+    3. Parse Markdown -> Get Blocks with semantic roles
+    4. Reconstruct hierarchy (Parent-Child relationships)
+    5. Store in DB
     """
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        logger.error(f"Document {document_id} not found")
-        return
+    with SessionLocal() as db:
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            logger.error(f"Document {document_id} not found")
+            return
 
-    try:
-        # Set status to RUNNING
-        document.status = "RUNNING"
-        db.commit()
-
-        # Download PDF from MinIO
-        logger.info(f"Processing document {document_id}: {document.filename}")
-        pdf_bytes = download_bytes(document.storage_path)
-
-        # Open PDF with PyMuPDF
-        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        logger.info(f"PDF has {len(pdf_doc)} pages")
-
-        # Process each page
-        for page_num in range(len(pdf_doc)):
-            page = pdf_doc[page_num]
-            width, height = page.rect.width, page.rect.height
-
-            # Create Page record
-            db_page = Page(
-                document_id=document_id,
-                page_number=page_num + 1,
-                width=width,
-                height=height,
-            )
-            db.add(db_page)
-            db.flush()  # Get page ID
-
-            # Extract text blocks
-            # get_text("blocks") returns: (x0, y0, x1, y1, text, block_type, block_no)
-            blocks = page.get_text("blocks")
-            logger.info(f"Page {page_num + 1}: extracted {len(blocks)} blocks")
-
-            for block in blocks:
-                x0, y0, x1, y1, text = block[0], block[1], block[2], block[3], block[4]
-
-                # Skip empty blocks
-                if not text or not text.strip():
-                    continue
-
-                # Normalize coordinates to 0-1 range
-                # This makes coordinates resolution-independent
-                # Formula: normalized = pixel_value / page_dimension
-                bbox = {
-                    "x0": x0 / width,
-                    "y0": y0 / height,
-                    "x1": x1 / width,
-                    "y1": y1 / height,
-                }
-
-                db_block = Block(
-                    page_id=db_page.id,
-                    type="text",
-                    bbox=bbox,
-                    text_raw=text.strip(),
-                    ocr_used=False,
-                )
-                db.add(db_block)
-
+        try:
+            # Set status to RUNNING
+            document.status = "RUNNING"
             db.commit()
 
-        pdf_doc.close()
+            # Download PDF from MinIO
+            logger.info(f"Processing document {document_id}: {document.filename}")
+            pdf_bytes = download_bytes(document.storage_path)
 
-        # Set status to SUCCESS
-        document.status = "SUCCESS"
-        db.commit()
-        logger.info(f"Document {document_id} processed successfully")
+            # Create temp file for LlamaParse
+            # Determine extension from filename or storage path
+            ext = ".pdf"
+            if document.filename.lower().endswith(".docx"):
+                ext = ".docx"
+                
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
+                temp_file.write(pdf_bytes)
+                temp_file_path = temp_file.name
 
-    except Exception as e:
-        logger.error(f"Error processing document {document_id}: {str(e)}", exc_info=True)
-        document.status = "FAILED"
-        db.commit()
-        raise  # Re-raise for debugging
+            try:
+                # Call LlamaParse
+                logger.info("Sending to LlamaParse...")
+                llama_service = LlamaParseService()
+                # Returns List[Document] where each doc is a page
+                # Returns List[Document] where each doc is a page
+                parsed_pages = await llama_service.parse_pdf(temp_file_path)
+                logger.info(f"LlamaParse returned {len(parsed_pages)} pages")
+
+                if not parsed_pages:
+                    raise Exception("LlamaParse returned no pages. Check API key or file content.")
+                
+                # DEBUG: Save raw output to local docs/ folder for inspection
+                try:
+                    # Assuming docs/ is in the project root, relative to where this runs
+                    # We can try to find the docs folder or just use an absolute path if known, 
+                    # but let's try a relative path from the app root.
+                    # If running via docker, this might be inside the container.
+                    # If running locally via script, it depends on CWD.
+                    # Let's try to save to the same 'docs' folder where we look for uploads in dev
+                    local_docs_path = os.path.join(os.getcwd(), "docs")
+                    if not os.path.exists(local_docs_path):
+                        os.makedirs(local_docs_path, exist_ok=True)
+                        
+                    debug_file_path = os.path.join(local_docs_path, f"raw_output_{document_id}.md")
+                    with open(debug_file_path, "w", encoding="utf-8") as f:
+                        f.write(full_markdown)
+                    logger.info(f"Saved raw LlamaParse output to {debug_file_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save debug raw output: {e}")
+                
+                # Initialize parsers
+                # image_handler = ImageHandler() # Removed
+                md_parser = MarkdownParser()
+                # json_parser = JsonParser() # Removed
+                
+                # Hierarchy tracking state
+                # Stack of {"level": int, "block_id": int}
+                # hierarchy_stack = []
+
+                # Merge all pages into one text stream to avoid page break issues
+                full_text = "\n\n".join([p.text for p in parsed_pages])
+                
+                # Create a single Page record for the whole document
+                # We'll call it Page 1
+                logger.info("Processing merged document as Page 1")
+                
+                db_page = Page(
+                    document_id=document_id,
+                    page_number=1,
+                    width=0, 
+                    height=0,
+                )
+                db.add(db_page)
+                db.flush()
+                
+                # Parse the full merged markdown
+                blocks = md_parser.parse(full_text, 1)
+                
+                for block_data in blocks:
+                    # Create Block record
+                    db_block = Block(
+                        page_id=db_page.id,
+                        type=block_data["type"],
+                        semantic_role=block_data["semantic_role"],
+                        text_raw=block_data["text_raw"],
+                        bbox=block_data["bbox"],
+                        parent_block_id=None,
+                        table_data=block_data.get("table_data"),
+                    )
+                    db.add(db_block)
+
+                db.commit()
+
+            finally:
+                # Cleanup temp file
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+
+            # Set status to SUCCESS
+            document.status = "SUCCESS"
+            db.commit()
+            logger.info(f"Document {document_id} processed successfully")
+
+        except Exception as e:
+            logger.error(f"Error processing document {document_id}: {str(e)}", exc_info=True)
+            document.status = "FAILED"
+            db.commit()

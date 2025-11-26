@@ -3,269 +3,203 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
-interface Bbox {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-}
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
 interface Block {
-  id: number;
-  page_id: number;
-  page_number: number;
+  page: number;
   type: string;
-  bbox: Bbox;
-  text_raw: string;
-  ocr_used: boolean;
+  semantic_role: string;
+  hierarchy_level: number | null;
+  text: string;
+  bbox: any;
+  table_data?: {
+    headers: string[];
+    rows: { text: string; colspan: number; rowspan: number }[][];
+  };
 }
 
-interface Page {
-  id: number;
-  page_number: number;
-  width: number;
-  height: number;
-  blocks: Block[];
-}
-
-interface Document {
+interface DocumentDetail {
   id: number;
   filename: string;
-  storage_path: string;
-  checksum: string;
   status: string;
-  created_at: string;
-  pages: Page[];
 }
 
-export default function DocumentDetailPage() {
+export default function DocumentDetails() {
   const params = useParams();
-  const [doc, setDoc] = useState<Document | null>(null);
+  const id = params.id;
+  
+  const [document, setDocument] = useState<DocumentDetail | null>(null);
+  const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/documents/${params.id}`)
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then((data) => setDoc(data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [params.id]);
+    if (!id) return;
+
+    const fetchData = async () => {
+      try {
+        const docRes = await fetch(`http://localhost:8000/documents/${id}`);
+        if (docRes.ok) setDocument(await docRes.json());
+
+        const blocksRes = await fetch(`http://localhost:8000/documents/${id}/blocks`);
+        if (blocksRes.ok) setBlocks(await blocksRes.json());
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [id]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-          <p className="mt-4 text-slate-600">Loading document...</p>
-        </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
-  if (error) {
+  if (!document) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-          <div className="text-red-600 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold mb-2">Error Loading Document</h2>
-          <p className="text-sm text-slate-600 mb-6">{error}</p>
-          <Link
-            href="/"
-            className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-          >
-            ← Back to Upload
-          </Link>
-        </div>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Document not found</h2>
+        <Link href="/" className="text-indigo-600 hover:text-indigo-800">Return to Dashboard</Link>
       </div>
     );
   }
 
-  if (!doc) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <p className="text-slate-600">Document not found</p>
-          <Link
-            href="/"
-            className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-          >
-            ← Back to Upload
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const totalBlocks = doc.pages.reduce((sum, page) => sum + page.blocks.length, 0);
-
-  return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4">
-      <div className="max-w-5xl mx-auto">
-        {/* Header with back button */}
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="inline-flex items-center text-sm text-blue-600 hover:text-blue-700 mb-4"
-          >
-            ← Back to Upload
-          </Link>
-        </div>
-
-        {/* Document metadata card */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">{doc.filename}</h1>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <span className="text-sm text-slate-500">Status:</span>
-              <span
-                className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${
-                  doc.status === "SUCCESS"
-                    ? "bg-green-100 text-green-800"
-                    : doc.status === "FAILED"
-                    ? "bg-red-100 text-red-800"
-                    : doc.status === "RUNNING"
-                    ? "bg-yellow-100 text-yellow-800"
-                    : "bg-gray-100 text-gray-800"
-                }`}
-              >
-                {doc.status}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-sm text-slate-500">Document ID:</span>
-              <span className="ml-2 font-mono text-sm text-slate-700">{doc.id}</span>
-            </div>
-
-            <div>
-              <span className="text-sm text-slate-500">Pages:</span>
-              <span className="ml-2 font-semibold text-slate-900">{doc.pages.length}</span>
-            </div>
-
-            <div>
-              <span className="text-sm text-slate-500">Total Blocks:</span>
-              <span className="ml-2 font-semibold text-slate-900">{totalBlocks}</span>
-            </div>
-
-            <div>
-              <span className="text-sm text-slate-500">Uploaded:</span>
-              <span className="ml-2 text-sm text-slate-700">
-                {new Date(doc.created_at).toLocaleString()}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-sm text-slate-500">Checksum:</span>
-              <span className="ml-2 font-mono text-xs text-slate-600">{doc.checksum}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Pages list */}
-        {doc.status === "SUCCESS" && doc.pages.length > 0 ? (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-slate-900 mb-4">Extracted Content</h2>
-            {doc.pages.map((page) => (
-              <PageSection key={page.id} page={page} />
-            ))}
-          </div>
-        ) : doc.status === "RUNNING" ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-            <p className="text-yellow-800">Document is currently being processed...</p>
-            <p className="text-sm text-yellow-600 mt-2">Refresh the page in a few moments.</p>
-          </div>
-        ) : doc.status === "FAILED" ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <p className="text-red-800">Processing failed for this document.</p>
-            <p className="text-sm text-red-600 mt-2">Please try uploading again.</p>
-          </div>
-        ) : (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-            <p className="text-gray-600">No content extracted yet.</p>
-          </div>
-        )}
-      </div>
-    </div>
+  // Filter headings for TOC
+  const toc = blocks.filter(b => 
+    ['title', 'chapter_heading', 'section_heading'].includes(b.semantic_role)
   );
-}
-
-function PageSection({ page }: { page: Page }) {
-  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 text-left font-semibold text-slate-900 hover:bg-slate-50 transition flex justify-between items-center"
-      >
-        <span>
-          Page {page.page_number} - {page.blocks.length} block{page.blocks.length !== 1 ? "s" : ""}
-        </span>
-        <span className="text-slate-400">{expanded ? "▼" : "▶"}</span>
-      </button>
-
-      {expanded && (
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <div className="text-xs text-slate-500 mb-4">
-            Dimensions: {page.width.toFixed(1)} × {page.height.toFixed(1)} pts
-          </div>
-
-          {page.blocks.length > 0 ? (
-            <div className="space-y-3">
-              {page.blocks.map((block) => (
-                <BlockItem key={block.id} block={block} />
-              ))}
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-16 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center space-x-2 text-sm text-gray-500 mb-1">
+                <Link href="/" className="hover:text-gray-900">Dashboard</Link>
+                <span>/</span>
+                <span>Documents</span>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">{document.filename}</h1>
             </div>
-          ) : (
-            <p className="text-sm text-slate-500 italic">No blocks extracted from this page.</p>
-          )}
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              document.status === 'SUCCESS' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+            }`}>
+              {document.status}
+            </span>
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-function BlockItem({ block }: { block: Block }) {
-  const [showFull, setShowFull] = useState(false);
-  const isTruncated = block.text_raw.length > 200;
-  const displayText = showFull || !isTruncated ? block.text_raw : block.text_raw.substring(0, 200) + "...";
-
-  return (
-    <div className="border-l-4 border-blue-500 pl-4 py-2 bg-white rounded-r">
-      <div className="text-xs text-slate-500 mb-2 flex flex-wrap gap-x-4 gap-y-1">
-        <span>
-          <strong>Block #{block.id}</strong>
-        </span>
-        <span>Type: {block.type}</span>
-        <span>
-          BBox: ({block.bbox.x0.toFixed(3)}, {block.bbox.y0.toFixed(3)}) → (
-          {block.bbox.x1.toFixed(3)}, {block.bbox.y1.toFixed(3)})
-        </span>
-        {block.ocr_used && (
-          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-            OCR
-          </span>
-        )}
       </div>
 
-      <p className="text-sm text-slate-800 whitespace-pre-wrap">{displayText}</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* Sidebar TOC */}
+          <aside className="lg:w-64 flex-shrink-0">
+            <div className="sticky top-40 bg-white rounded-lg shadow-sm border border-gray-200 p-4 max-h-[calc(100vh-12rem)] overflow-y-auto">
+              <h3 className="font-semibold text-gray-900 mb-4 uppercase text-xs tracking-wider">Contents</h3>
+              <nav className="space-y-1">
+                {toc.map((item, idx) => (
+                  <a
+                    key={idx}
+                    href={`#block-${idx}`} // In real app, use stable IDs
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.document.getElementById(`block-${idx}`)?.scrollIntoView({ behavior: 'smooth' });
+                      setActiveSection(idx);
+                    }}
+                    className={`block py-1.5 text-sm transition-colors ${
+                      item.semantic_role === 'title' ? 'font-bold text-gray-900' :
+                      item.semantic_role === 'chapter_heading' ? 'pl-2 font-medium text-gray-800' :
+                      'pl-4 text-gray-600 hover:text-indigo-600'
+                    } ${activeSection === idx ? 'text-indigo-600' : ''}`}
+                  >
+                    {item.text || "Untitled Section"}
+                  </a>
+                ))}
+                {toc.length === 0 && <p className="text-sm text-gray-400 italic">No headings found</p>}
+              </nav>
+            </div>
+          </aside>
 
-      {isTruncated && (
-        <button
-          onClick={() => setShowFull(!showFull)}
-          className="text-xs text-blue-600 hover:text-blue-700 mt-2 font-medium"
-        >
-          {showFull ? "Show less" : "Show more"}
-        </button>
-      )}
+          {/* Main Content */}
+          <main className="flex-1 min-w-0">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 sm:p-12">
+              <div className="prose prose-indigo max-w-none">
+                {blocks.map((block, idx) => {
+                  // Assign ID for TOC linking (using index for MVP simplicity)
+                  const id = toc.includes(block) ? `block-${toc.indexOf(block)}` : undefined;
+
+                  switch (block.semantic_role) {
+                    case 'title':
+                      return <h1 key={idx} id={id} className="text-4xl font-bold mb-6 text-gray-900">{block.text}</h1>;
+                    case 'chapter_heading':
+                      return <h2 key={idx} id={id} className="text-2xl font-bold mt-8 mb-4 text-gray-800 border-b pb-2">{block.text}</h2>;
+                    case 'section_heading':
+                      return <h3 key={idx} id={id} className="text-xl font-semibold mt-6 mb-3 text-gray-800">{block.text}</h3>;
+                    case 'table':
+                      // If we have structured table data, use it (legacy/fallback)
+                      if (block.table_data) {
+                        return (
+                          <div key={idx} className="my-6 overflow-x-auto">
+                             <table className="min-w-full divide-y divide-gray-300 border border-gray-200">
+                               <thead className="bg-gray-50">
+                                 <tr>
+                                   {block.table_data.headers.map((h, i) => (
+                                     <th key={i} className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
+                                       {h}
+                                     </th>
+                                   ))}
+                                 </tr>
+                               </thead>
+                               <tbody className="divide-y divide-gray-200 bg-white">
+                                 {block.table_data.rows.map((row, rIdx) => (
+                                   <tr key={rIdx}>
+                                     {row.map((cell, cIdx) => (
+                                       <td 
+                                         key={cIdx} 
+                                         colSpan={cell.colspan} 
+                                         rowSpan={cell.rowspan}
+                                         className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 border-r border-gray-100 last:border-r-0"
+                                       >
+                                         {cell.text}
+                                       </td>
+                                     ))}
+                                   </tr>
+                                 ))}
+                               </tbody>
+                             </table>
+                          </div>
+                        );
+                      }
+                      // Fallthrough to default markdown rendering for raw table text
+                    default: 
+                      // Use ReactMarkdown for paragraphs and other text content to handle 
+                      // raw markdown (like tables, lists, bold/italic) that might be in the text.
+                      return (
+                        <div key={idx} className="mb-4 text-gray-700 leading-relaxed prose prose-indigo max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                            {block.text}
+                          </ReactMarkdown>
+                        </div>
+                      );
+                  }
+                })}
+              </div>
+            </div>
+          </main>
+
+        </div>
+      </div>
     </div>
   );
 }
