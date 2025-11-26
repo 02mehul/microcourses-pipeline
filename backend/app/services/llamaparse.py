@@ -3,8 +3,7 @@ import nest_asyncio
 from llama_parse import LlamaParse
 from ..config import settings
 
-# Apply nest_asyncio to allow nested event loops (needed for LlamaParse in some envs)
-# nest_asyncio.apply() # Removed to fix uvloop conflict
+
 
 class LlamaParseService:
     def __init__(self):

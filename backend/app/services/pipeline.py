@@ -19,8 +19,7 @@ from .storage import download_bytes, upload_fileobj
 from ..models import Document, Page, Block
 from .llamaparse import LlamaParseService
 from .markdown_parser import MarkdownParser
-from .json_parser import JsonParser
-# from .image_handler import ImageHandler # Removed image handling
+
 from ..db import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -67,40 +66,17 @@ async def process_document(document_id: int) -> None:
                 logger.info("Sending to LlamaParse...")
                 llama_service = LlamaParseService()
                 # Returns List[Document] where each doc is a page
-                # Returns List[Document] where each doc is a page
+
                 parsed_pages = await llama_service.parse_pdf(temp_file_path)
                 logger.info(f"LlamaParse returned {len(parsed_pages)} pages")
 
                 if not parsed_pages:
                     raise Exception("LlamaParse returned no pages. Check API key or file content.")
                 
-                # DEBUG: Save raw output to local docs/ folder for inspection
-                try:
-                    # Assuming docs/ is in the project root, relative to where this runs
-                    # We can try to find the docs folder or just use an absolute path if known, 
-                    # but let's try a relative path from the app root.
-                    # If running via docker, this might be inside the container.
-                    # If running locally via script, it depends on CWD.
-                    # Let's try to save to the same 'docs' folder where we look for uploads in dev
-                    local_docs_path = os.path.join(os.getcwd(), "docs")
-                    if not os.path.exists(local_docs_path):
-                        os.makedirs(local_docs_path, exist_ok=True)
-                        
-                    debug_file_path = os.path.join(local_docs_path, f"raw_output_{document_id}.md")
-                    with open(debug_file_path, "w", encoding="utf-8") as f:
-                        f.write(full_markdown)
-                    logger.info(f"Saved raw LlamaParse output to {debug_file_path}")
-                except Exception as e:
-                    logger.error(f"Failed to save debug raw output: {e}")
-                
+
                 # Initialize parsers
-                # image_handler = ImageHandler() # Removed
                 md_parser = MarkdownParser()
-                # json_parser = JsonParser() # Removed
-                
-                # Hierarchy tracking state
-                # Stack of {"level": int, "block_id": int}
-                # hierarchy_stack = []
+
 
                 # Merge all pages into one text stream to avoid page break issues
                 full_text = "\n\n".join([p.text for p in parsed_pages])

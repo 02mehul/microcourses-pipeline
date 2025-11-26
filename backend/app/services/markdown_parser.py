@@ -1,4 +1,4 @@
-import re
+
 import mistune
 from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup
@@ -6,10 +6,7 @@ from bs4 import BeautifulSoup
 class MarkdownParser:
     def __init__(self):
         self.markdown = mistune.create_markdown(renderer=None, plugins=['table'])
-        # State tracking for hierarchy across pages
-        # Stack of (level, block_index_global, block_id_db)
-        # We need to store the DB ID of the parent to link correctly
-        self.hierarchy_stack = [] 
+
 
     def parse(self, markdown_text: str, page_num: int) -> List[Dict[str, Any]]:
         """
