@@ -71,3 +71,48 @@ class Block(Base):
     def page_number(self) -> int:
         """Convenience property to get page number for API responses."""
         return self.page.page_number if self.page else 0
+
+
+class Slide(Base):
+    __tablename__ = "slides"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    slide_number = Column(Integer, nullable=False)
+    title = Column(String, nullable=True)
+    subheading = Column(String, nullable=True)
+    summary = Column(String, nullable=True)
+    content_chunk = Column(String, nullable=True)  # The raw text chunk used for this slide
+
+    # Hierarchical context (Milestone 3 requirement)
+    chapter_title = Column(String, nullable=True)
+    subchapter_title = Column(String, nullable=True)
+    subchapter_id = Column(String, nullable=True)  # Unique identifier for grouping
+
+    # Table support for visual data presentation
+    table_data = Column(JSON, nullable=True)  # {headers: [], rows: [[]], caption: ""}
+    has_table = Column(Boolean, default=False)  # Quick flag for frontend layout decisions
+
+    document = relationship("Document", back_populates="slides")
+    questions = relationship("Question", back_populates="slide", cascade="all, delete-orphan")
+
+
+class Question(Base):
+    __tablename__ = "questions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    slide_id = Column(Integer, ForeignKey("slides.id"), nullable=True)
+    question_text = Column(String, nullable=False)
+    answer_text = Column(String, nullable=True)
+
+    # Subchapter grouping (Milestone 3: 3-4 questions per subchapter)
+    subchapter_id = Column(String, nullable=True)
+    subchapter_title = Column(String, nullable=True)
+
+    document = relationship("Document", back_populates="questions")
+    slide = relationship("Slide", back_populates="questions")
+
+# Update Document relationship
+Document.slides = relationship("Slide", back_populates="document", cascade="all, delete-orphan")
+Document.questions = relationship("Question", back_populates="document", cascade="all, delete-orphan")

@@ -111,7 +111,13 @@ async def upload_document(
 
 @router.get("/{document_id}", response_model=DocumentDetailResponse)
 def get_document(document_id: int, db: Session = Depends(get_db)):
-    doc = db.get(models.Document, document_id)
+    from sqlalchemy.orm import joinedload
+    doc = (
+        db.query(models.Document)
+        .options(joinedload(models.Document.slides), joinedload(models.Document.questions))
+        .filter(models.Document.id == document_id)
+        .first()
+    )
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc

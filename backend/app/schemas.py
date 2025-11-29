@@ -6,7 +6,7 @@ ensuring type safety and automatic OpenAPI documentation generation.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
@@ -73,6 +73,41 @@ class DocumentCreateResponse(BaseModel):
         from_attributes = True
 
 
+class QuestionResponse(BaseModel):
+    """
+    Review question generated from content.
+    """
+    id: int
+    question_text: str
+    answer_text: Optional[str] = None
+    subchapter_id: Optional[str] = None
+    subchapter_title: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SlideResponse(BaseModel):
+    """
+    Generated slide content.
+    """
+    id: int
+    slide_number: int
+    title: Optional[str] = None
+    subheading: Optional[str] = None
+    summary: Optional[str] = None
+    content_chunk: Optional[str] = None
+    chapter_title: Optional[str] = None
+    subchapter_title: Optional[str] = None
+    subchapter_id: Optional[str] = None
+    table_data: Optional[Dict[str, Any]] = None
+    has_table: Optional[bool] = False
+    questions: List[QuestionResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
 class DocumentDetailResponse(BaseModel):
     """
     Complete document details with all extracted content.
@@ -86,6 +121,8 @@ class DocumentDetailResponse(BaseModel):
     status: str
     created_at: datetime
     pages: List[PageResponse] = []
+    slides: List[SlideResponse] = []
+    questions: List[QuestionResponse] = []
 
     class Config:
         from_attributes = True

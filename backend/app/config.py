@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     MINIO_BUCKET: str = "documents"
 
     LLAMA_CLOUD_API_KEY: str = "llx-..."  # Set in .env
+    GEMINI_API_KEY: str = ""  # Set in .env - required for slide/question generation
 
     class Config:
         # This is relative to the directory where you run uvicorn (backend/)

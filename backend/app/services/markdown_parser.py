@@ -56,12 +56,35 @@ class MarkdownParser:
 
         elif node_type == "paragraph":
             text = self._get_text_content(node)
+
             # Check for images in paragraph
-            if "![" in text and "](" in text: 
+            if "![" in text and "](" in text:
                 # Basic check, mistune might have nested image node
                 # For now, treat as text, we might need deeper inspection for images
                 pass
-            
+
+            # Detect figure captions/descriptions
+            # These are text describing charts/figures that LlamaParse converted to text
+            text_lower = text.lower()
+            is_figure_caption = (
+                text.startswith("Note:") or
+                text.startswith("Figure ") or
+                text.startswith("Chart ") or
+                "the chart shows" in text_lower or
+                "the figure shows" in text_lower or
+                "the graph shows" in text_lower or
+                "source:" in text_lower or
+                "© diw berlin" in text_lower  # Copyright notices on figures
+            )
+
+            if is_figure_caption:
+                return {
+                    "type": "figure",  # Type is figure, not text
+                    "semantic_role": "figure_caption",
+                    "text_raw": text,
+                    "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0}
+                }
+
             return {
                 "type": "text",
                 "semantic_role": "paragraph",
@@ -99,8 +122,32 @@ class MarkdownParser:
         
         elif node_type == "image":
             # Handle image nodes
-            # As per requirements, we are ignoring images for now
-            return None
+            # Extract alt text and URL
+            children = node.get("children", [])
+            alt_text = ""
+            image_url = ""
+
+            if children:
+                # Alt text is in children
+                alt_text = self._get_text_content(node)
+
+            # Try to get URL from node attributes
+            if "attrs" in node and "url" in node["attrs"]:
+                image_url = node["attrs"]["url"]
+            elif children and "raw" in children[0]:
+                image_url = children[0]["raw"]
+
+            return {
+                "type": "figure",
+                "semantic_role": "figure",
+                "text_raw": alt_text,  # Alt text stored separately
+                "image_path": image_url,  # URL or path to image
+                "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0},
+                "metadata": {
+                    "original_url": image_url,
+                    "alt_text": alt_text
+                }
+            }
         
         elif node_type == "block_html":
             # Handle HTML blocks (for HTML tables when output_tables_as_HTML=True)

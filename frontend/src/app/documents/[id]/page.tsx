@@ -1,29 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { Loader2 } from "lucide-react";
+import SlideViewer from "@/components/SlideViewer";
+import QuizViewer from "@/components/QuizViewer";
 
-interface Block {
-  page: number;
-  type: string;
-  semantic_role: string;
-  hierarchy_level: number | null;
-  text: string;
-  bbox: any;
-  table_data?: {
-    headers: string[];
-    rows: { text: string; colspan: number; rowspan: number }[][];
-  };
+interface TableData {
+  headers: string[];
+  rows: string[][];
+  caption?: string;
+}
+
+interface Slide {
+  id: number;
+  slide_number: number;
+  title: string;
+  subheading: string;
+  summary: string;
+  content_chunk: string;
+  chapter_title?: string;
+  subchapter_title?: string;
+  subchapter_id?: string;
+  table_data?: TableData | null;
+  has_table?: boolean;
+}
+
+interface Question {
+  id: number;
+  question_text: string;
+  answer_text: string;
+  subchapter_id?: string;
+  subchapter_title?: string;
 }
 
 interface DocumentDetail {
   id: number;
   filename: string;
   status: string;
+  slides?: Slide[];
+  questions?: Question[];
 }
 
 export default function DocumentDetails() {
@@ -31,28 +48,47 @@ export default function DocumentDetails() {
   const id = params.id;
   
   const [document, setDocument] = useState<DocumentDetail | null>(null);
-  const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'slides' | 'quiz'>('slides');
+  const pollInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchDocument = async () => {
+    try {
+      const docRes = await fetch(`http://localhost:8000/documents/${id}`);
+      if (docRes.ok) {
+        const docData = await docRes.json();
+        setDocument(docData);
+        return docData;
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (!id) return;
 
-    const fetchData = async () => {
-      try {
-        const docRes = await fetch(`http://localhost:8000/documents/${id}`);
-        if (docRes.ok) setDocument(await docRes.json());
+    const initFetch = async () => {
+      const doc = await fetchDocument();
+      setLoading(false);
 
-        const blocksRes = await fetch(`http://localhost:8000/documents/${id}/blocks`);
-        if (blocksRes.ok) setBlocks(await blocksRes.json());
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
+      // Start polling if status is not final
+      if (doc && (doc.status === 'PENDING' || doc.status === 'RUNNING')) {
+        pollInterval.current = setInterval(async () => {
+          const updatedDoc = await fetchDocument();
+          if (updatedDoc && (updatedDoc.status === 'SUCCESS' || updatedDoc.status === 'FAILED')) {
+            if (pollInterval.current) clearInterval(pollInterval.current);
+          }
+        }, 2000);
       }
     };
 
-    fetchData();
+    initFetch();
+
+    return () => {
+      if (pollInterval.current) clearInterval(pollInterval.current);
+    };
   }, [id]);
 
   if (loading) {
@@ -72,17 +108,31 @@ export default function DocumentDetails() {
     );
   }
 
-  // Filter headings for TOC
-  const toc = blocks.filter(b => 
-    ['title', 'chapter_heading', 'section_heading'].includes(b.semantic_role)
-  );
+  // Processing State
+  if (document.status === 'PENDING' || document.status === 'RUNNING') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100 max-w-md w-full text-center">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Generating Microcourse</h2>
+          <p className="text-gray-500 mb-6">
+            We are processing <strong>{document.filename}</strong>. This involves extracting content, generating slides, and creating review questions.
+          </p>
+          <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
+            <div className="bg-indigo-600 h-2 rounded-full animate-pulse w-2/3 mx-auto"></div>
+          </div>
+          <p className="text-xs text-gray-400">This may take a minute...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-40">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <div className="flex items-center space-x-2 text-sm text-gray-500 mb-1">
                 <Link href="/" className="hover:text-gray-900">Dashboard</Link>
@@ -97,108 +147,48 @@ export default function DocumentDetails() {
               {document.status}
             </span>
           </div>
+
+          {/* Tabs */}
+          <div className="flex space-x-8 border-b border-gray-200 -mb-px">
+            <button
+              onClick={() => setActiveTab('slides')}
+              className={`pb-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'slides'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Generated Slides
+            </button>
+            <button
+              onClick={() => setActiveTab('quiz')}
+              className={`pb-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'quiz'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Review Quiz
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          
-          {/* Sidebar TOC */}
-          <aside className="lg:w-64 flex-shrink-0">
-            <div className="sticky top-40 bg-white rounded-lg shadow-sm border border-gray-200 p-4 max-h-[calc(100vh-12rem)] overflow-y-auto">
-              <h3 className="font-semibold text-gray-900 mb-4 uppercase text-xs tracking-wider">Contents</h3>
-              <nav className="space-y-1">
-                {toc.map((item, idx) => (
-                  <a
-                    key={idx}
-                    href={`#block-${idx}`} // In real app, use stable IDs
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.document.getElementById(`block-${idx}`)?.scrollIntoView({ behavior: 'smooth' });
-                      setActiveSection(idx);
-                    }}
-                    className={`block py-1.5 text-sm transition-colors ${
-                      item.semantic_role === 'title' ? 'font-bold text-gray-900' :
-                      item.semantic_role === 'chapter_heading' ? 'pl-2 font-medium text-gray-800' :
-                      'pl-4 text-gray-600 hover:text-indigo-600'
-                    } ${activeSection === idx ? 'text-indigo-600' : ''}`}
-                  >
-                    {item.text || "Untitled Section"}
-                  </a>
-                ))}
-                {toc.length === 0 && <p className="text-sm text-gray-400 italic">No headings found</p>}
-              </nav>
-            </div>
-          </aside>
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
 
-          {/* Main Content */}
-          <main className="flex-1 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 sm:p-12">
-              <div className="prose prose-indigo max-w-none">
-                {blocks.map((block, idx) => {
-                  // Assign ID for TOC linking (using index for MVP simplicity)
-                  const id = toc.includes(block) ? `block-${toc.indexOf(block)}` : undefined;
+        {/* Tab Content */}
+        {activeTab === 'slides' && (
+          <div className="w-full">
+            <SlideViewer slides={document.slides || []} />
+          </div>
+        )}
 
-                  switch (block.semantic_role) {
-                    case 'title':
-                      return <h1 key={idx} id={id} className="text-4xl font-bold mb-6 text-gray-900">{block.text}</h1>;
-                    case 'chapter_heading':
-                      return <h2 key={idx} id={id} className="text-2xl font-bold mt-8 mb-4 text-gray-800 border-b pb-2">{block.text}</h2>;
-                    case 'section_heading':
-                      return <h3 key={idx} id={id} className="text-xl font-semibold mt-6 mb-3 text-gray-800">{block.text}</h3>;
-                    case 'table':
-                      // If we have structured table data, use it (legacy/fallback)
-                      if (block.table_data) {
-                        return (
-                          <div key={idx} className="my-6 overflow-x-auto">
-                             <table className="min-w-full divide-y divide-gray-300 border border-gray-200">
-                               <thead className="bg-gray-50">
-                                 <tr>
-                                   {block.table_data.headers.map((h, i) => (
-                                     <th key={i} className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                                       {h}
-                                     </th>
-                                   ))}
-                                 </tr>
-                               </thead>
-                               <tbody className="divide-y divide-gray-200 bg-white">
-                                 {block.table_data.rows.map((row, rIdx) => (
-                                   <tr key={rIdx}>
-                                     {row.map((cell, cIdx) => (
-                                       <td 
-                                         key={cIdx} 
-                                         colSpan={cell.colspan} 
-                                         rowSpan={cell.rowspan}
-                                         className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 border-r border-gray-100 last:border-r-0"
-                                       >
-                                         {cell.text}
-                                       </td>
-                                     ))}
-                                   </tr>
-                                 ))}
-                               </tbody>
-                             </table>
-                          </div>
-                        );
-                      }
-                      // Fallthrough to default markdown rendering for raw table text
-                    default: 
-                      // Use ReactMarkdown for paragraphs and other text content to handle 
-                      // raw markdown (like tables, lists, bold/italic) that might be in the text.
-                      return (
-                        <div key={idx} className="mb-4 text-gray-700 leading-relaxed prose prose-indigo max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                            {block.text}
-                          </ReactMarkdown>
-                        </div>
-                      );
-                  }
-                })}
-              </div>
-            </div>
-          </main>
+        {activeTab === 'quiz' && (
+          <div className="max-w-3xl mx-auto">
+            <QuizViewer questions={document.questions || []} />
+          </div>
+        )}
 
-        </div>
       </div>
     </div>
   );
