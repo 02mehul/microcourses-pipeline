@@ -40,7 +40,7 @@ class LlamaParseService:
             """,
 
             # Use premium parsing (highest accuracy, slower)
-            premium_mode=True,
+            # premium_mode=True,
 
             # Never use cache (always fresh parse for accuracy)
             invalidate_cache=True,
