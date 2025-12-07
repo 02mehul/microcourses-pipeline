@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from .. import models
-from ..schemas import DocumentCreateResponse, DocumentDetailResponse
+from .. import schemas
 from ..services import storage
 from ..services.pipeline import process_document
 
@@ -22,7 +22,26 @@ def get_db():
         db.close()
 
 
-@router.get("/", response_model=List[DocumentCreateResponse])
+@router.put("/slides/{slide_id}", response_model=schemas.SlideResponse)
+def update_slide(slide_id: int, slide_update: schemas.SlideUpdate, db: Session = Depends(get_db)):
+    slide = db.query(models.Slide).filter(models.Slide.id == slide_id).first()
+    if not slide:
+        raise HTTPException(status_code=404, detail="Slide not found")
+
+    if slide_update.title is not None:
+        slide.title = slide_update.title
+    if slide_update.subheading is not None:
+        slide.subheading = slide_update.subheading
+    if slide_update.summary is not None:
+        slide.summary = slide_update.summary
+
+    db.commit()
+    db.refresh(slide)
+    return slide
+
+
+
+@router.get("/", response_model=List[schemas.DocumentCreateResponse])
 def list_documents(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of records to return"),
@@ -53,7 +72,7 @@ def list_documents(
     )
 
     return [
-        DocumentCreateResponse(
+        schemas.DocumentCreateResponse(
             document_id=doc.id,
             status=doc.status,
             filename=doc.filename,
@@ -63,7 +82,7 @@ def list_documents(
     ]
 
 
-@router.post("/", response_model=DocumentCreateResponse)
+@router.post("/", response_model=schemas.DocumentCreateResponse)
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -101,7 +120,7 @@ async def upload_document(
     # Refresh to get updated status and created_at
     db.refresh(doc)
 
-    return DocumentCreateResponse(
+    return schemas.DocumentCreateResponse(
         document_id=doc.id,
         status=doc.status,
         filename=doc.filename,
@@ -109,7 +128,7 @@ async def upload_document(
     )
 
 
-@router.get("/{document_id}", response_model=DocumentDetailResponse)
+@router.get("/{document_id}", response_model=schemas.DocumentDetailResponse)
 def get_document(document_id: int, db: Session = Depends(get_db)):
     from sqlalchemy.orm import joinedload
     doc = (
@@ -149,4 +168,47 @@ def get_blocks(document_id: int, db: Session = Depends(get_db)):
                     "table_data": b.table_data,
                 }
             )
+
     return result
+
+
+@router.post("/{document_id}/chat", response_model=schemas.ChatResponse)
+def chat_document(
+    document_id: int,
+    chat_request: schemas.ChatRequest,
+    db: Session = Depends(get_db)
+):
+    # Get document
+    doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Get all text blocks for context
+    # We join all text blocks to create the context
+    # Optimization: In a real app, we might use RAG (embeddings) here for large docs
+    pages = db.query(models.Page).filter(models.Page.document_id == document_id).all()
+    all_text = []
+    for p in pages:
+        for b in p.blocks:
+            if b.text_raw:
+                text_part = b.text_raw
+                if b.table_data:
+                    import json
+                    text_part += f"\n[TABLE_DATA] {json.dumps(b.table_data)}"
+                all_text.append(text_part)
+    
+    full_text = "\n\n".join(all_text)
+    
+    if not full_text:
+        raise HTTPException(status_code=400, detail="Document has no text content")
+
+    from ..services.content_processor import ContentProcessor
+    processor = ContentProcessor()
+    
+    response_text = processor.chat_with_document(
+        document_text=full_text,
+        message=chat_request.message,
+        history=chat_request.history
+    )
+    
+    return schemas.ChatResponse(response=response_text)

@@ -108,6 +108,25 @@ class SlideResponse(BaseModel):
         from_attributes = True
 
 
+class SlideUpdate(BaseModel):
+    """
+    Schema for updating slide content.
+    """
+    title: Optional[str] = None
+    subheading: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[Dict[str, str]] = []  # List of {"role": "user"|"model", "content": "..."}
+
+
+class ChatResponse(BaseModel):
+    response: str
+
+
+
 class DocumentDetailResponse(BaseModel):
     """
     Complete document details with all extracted content.

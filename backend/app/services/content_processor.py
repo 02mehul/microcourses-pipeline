@@ -121,7 +121,46 @@ class ContentProcessor:
                 "blocks": current_blocks
             })
 
-        logger.info(f"Detected {len(subchapters)} subchapters")
+        # Limit to max 7 subchapters (Milestone requirement update)
+        MAX_SUBCHAPTERS = 7
+        if len(subchapters) > MAX_SUBCHAPTERS:
+            logger.info(f"Detected {len(subchapters)} subchapters, merging to max {MAX_SUBCHAPTERS}...")
+            
+            # Calculate chunk size to distribute evenly
+            import math
+            chunk_size = math.ceil(len(subchapters) / MAX_SUBCHAPTERS)
+            
+            merged_subchapters = []
+            for i in range(0, len(subchapters), chunk_size):
+                chunk = subchapters[i:i + chunk_size]
+                if not chunk:
+                    continue
+                
+                # Use the title of the first subchapter in the chunk
+                base = chunk[0]
+                merged_blocks = []
+                for sc in chunk:
+                    merged_blocks.extend(sc["blocks"])
+                
+                # Update title to indicate range if multiple merged
+                if len(chunk) > 1:
+                    new_title = f"{base['subchapter_title']} - {chunk[-1]['subchapter_title']}"
+                    # Truncate if too long
+                    if len(new_title) > 100:
+                        new_title = f"{base['subchapter_title']} et al."
+                else:
+                    new_title = base["subchapter_title"]
+
+                merged_subchapters.append({
+                    "id": base["id"],
+                    "chapter_title": base["chapter_title"],
+                    "subchapter_title": new_title,
+                    "blocks": merged_blocks
+                })
+            
+            subchapters = merged_subchapters
+
+        logger.info(f"Final subchapters count: {len(subchapters)}")
         return subchapters
 
     def chunk_subchapter_into_slides(self, subchapter: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -360,31 +399,52 @@ JSON Output:"""
             logger.error(f"Error in batch slide generation: {e}", exc_info=True)
             return []
 
-    def generate_slide_content(self, chunk: str) -> Dict[str, Any]:
+    def generate_slides_for_subchapter(self, blocks: List[Block], subchapter_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Generate slide content using Gemini API.
+        Generate slides for a specific subchapter.
+        """
+        # Combine text blocks
+        full_content = "\n\n".join([
+            f"[{block.semantic_role or block.type}] {block.text_raw}" +
+            (f"\n[TABLE_DATA] {json.dumps(block.table_data)}" if block.table_data else "")
+            for block in blocks
+            if block.text_raw
+        ])
         
-        DEPRECATED: Use generate_all_slides_batch() instead for better performance.
-        This method is kept for backward compatibility.
-        """
-        prompt = f"""You are an expert educational content creator. Your task is to create a single presentation slide from the following text chunk.
+        full_content = self.filter_content(full_content)
+        
+        if not full_content:
+            return []
 
-Return ONLY a JSON object with the following fields:
-- title: A concise title for the slide.
-- subheading: A brief subheading.
-- summary: A bulleted summary of the key points (max 3-4 bullets).
+        prompt = f"""You are an expert educational content creator. Create a set of presentation slides for the following subchapter.
 
-Text Chunk:
-{chunk}
+CONTEXT:
+Chapter: {subchapter_meta.get('chapter_title')}
+Subchapter: {subchapter_meta.get('subchapter_title')}
+
+INSTRUCTIONS:
+1. Create 1-3 slides that cover the key concepts of this subchapter.
+2. Each slide must have a clear title, subheading, and bulleted summary.
+3. Include a small table ONLY if the content contains data that benefits from it.
+
+Return ONLY a JSON object with a "slides" key containing an array of slide objects.
+Each slide object must have:
+- title: A clear, concise title
+- subheading: A brief subheading
+- summary: A bulleted list of 3-4 key points (as an array of strings)
+- table: (OPTIONAL) {{headers: [], rows: [], caption: ""}}
+
+CONTENT:
+{full_content[:10000]}
 
 JSON Output:"""
 
         try:
-            # Add small delay to avoid rate limits
+            # Add delay to avoid rate limits
             time.sleep(1)
-
+            
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",  # More stable with better rate limits
+                model="gemini-2.5-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -393,24 +453,43 @@ JSON Output:"""
             )
 
             result = json.loads(response.text)
-            logger.debug(f"Gemini response: {result}")
-            return result
+            slides = result.get("slides", [])
+            
+            # Normalize slides
+            normalized_slides = []
+            # Hard limit to 3 slides per subchapter
+            for slide in slides[:3]:
+                summary = slide.get("summary", [])
+                if isinstance(summary, list):
+                    summary_text = "\n".join(f"- {item}" for item in summary if item)
+                elif isinstance(summary, str):
+                    summary_text = summary
+                else:
+                    summary_text = str(summary)
 
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error from Gemini: {e}", exc_info=True)
-            logger.error(f"Raw response: {response.text if 'response' in locals() else 'No response'}")
-            return {
-                "title": "Error Generating Slide",
-                "subheading": "",
-                "summary": "Could not parse JSON response from API."
-            }
+                table_data = slide.get("table")
+                has_table = table_data is not None and isinstance(table_data, dict)
+                if has_table and (not table_data.get("headers") or not table_data.get("rows")):
+                    has_table = False
+                    table_data = None
+
+                normalized_slides.append({
+                    "title": slide.get("title", "Untitled Slide"),
+                    "subheading": slide.get("subheading", ""),
+                    "summary": summary_text,
+                    "table_data": table_data,
+                    "has_table": has_table,
+                    "chapter_title": subchapter_meta.get("chapter_title"),
+                    "subchapter_title": subchapter_meta.get("subchapter_title"),
+                    "subchapter_id": subchapter_meta.get("id")
+                })
+            
+            return normalized_slides
+
         except Exception as e:
-            logger.error(f"Error generating slide content: {e}", exc_info=True)
-            return {
-                "title": "Error Generating Slide",
-                "subheading": "",
-                "summary": "Could not generate content."
-            }
+            logger.error(f"Error generating slides for subchapter: {e}", exc_info=True)
+            return []
+
 
     def generate_questions_for_subchapter(self, subchapter_content: str) -> List[Dict[str, str]]:
         """
@@ -495,3 +574,67 @@ JSON Output:"""
         except Exception as e:
             logger.error(f"Error generating questions: {e}", exc_info=True)
             return []
+
+    def chat_with_document(self, document_text: str, message: str, history: List[Dict[str, str]]) -> str:
+        """
+        Chat with the document content using Gemini.
+        """
+        try:
+            # Construct chat history for Gemini
+            chat_history = []
+            for msg in history:
+                role = "user" if msg["role"] == "user" else "model"
+                chat_history.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+
+            # System prompt with context
+            system_instruction = f"""You are a helpful and knowledgeable Teaching Assistant for a micro-course.
+            
+            CONTEXT:
+            The user is studying the following document:
+            
+            {document_text[:30000]}  # Limit context to avoid token limits
+            
+            INSTRUCTIONS:
+            1. Answer the user's questions based PRIMARILY on the provided document content.
+            2. If the answer is not in the document, you can use your general knowledge but mention that it's outside the document's scope.
+            3. Be encouraging, clear, and educational.
+            4. Use Markdown for formatting (bold, lists, code blocks) to make answers easy to read.
+            5. Keep answers concise unless asked for detailed explanations.
+            6. DATA ANALYSIS & CHARTS:
+               - The document content may contain [TABLE_DATA] JSON blocks. Use this data to answer analytical questions.
+               - If the user asks for a chart, visualization, or analysis that benefits from a chart, generate a JSON block wrapped in [CHART] tags.
+               - Supported chart types: "bar", "line", "pie", "area".
+               - Format:
+                 [CHART]
+                 {{
+                   "type": "bar",
+                   "title": "Chart Title",
+                   "data": [
+                     {{"label": "Category A", "value": 10}},
+                     {{"label": "Category B", "value": 20}}
+                   ],
+                   "xAxisKey": "label",
+                   "seriesKey": "value",
+                   "description": "Brief explanation of the chart"
+                 }}
+                 [/CHART]
+               - You can include multiple charts if needed.
+               - Always provide a text summary/analysis along with the chart.
+            """
+
+            # Create chat session
+            chat = self.client.chats.create(
+                model="gemini-2.5-flash",
+                history=chat_history,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.7,
+                )
+            )
+
+            response = chat.send_message(message)
+            return response.text
+
+        except Exception as e:
+            logger.error(f"Error in chat: {e}", exc_info=True)
+            return "I apologize, but I encountered an error while processing your request. Please try again."

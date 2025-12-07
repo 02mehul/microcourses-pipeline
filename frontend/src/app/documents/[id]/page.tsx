@@ -4,8 +4,9 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-import SlideViewer from "@/components/SlideViewer";
+import SlideEditor from "@/components/SlideEditor";
 import QuizViewer from "@/components/QuizViewer";
+import ChatAssistant from "@/components/ChatAssistant";
 
 interface TableData {
   headers: string[];
@@ -49,7 +50,8 @@ export default function DocumentDetails() {
   
   const [document, setDocument] = useState<DocumentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'slides' | 'quiz'>('slides');
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'slides' | 'quiz' | 'chat'>('slides');
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
   const fetchDocument = async () => {
@@ -59,11 +61,44 @@ export default function DocumentDetails() {
         const docData = await docRes.json();
         setDocument(docData);
         return docData;
+      } else {
+        setError("Failed to fetch document");
       }
-    } catch (error) {
-      console.error("Error fetching data:", error);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("An error occurred while fetching the document");
     }
     return null;
+  };
+
+  const handleSaveSlide = async (slideId: number, updatedSlide: Partial<Slide>) => {
+    try {
+      const res = await fetch(`http://localhost:8000/documents/slides/${slideId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedSlide),
+      });
+
+      if (res.ok) {
+        // Optimistic update or refetch
+        setDocument(prev => {
+          if (!prev || !prev.slides) return prev;
+          return {
+            ...prev,
+            slides: prev.slides.map(slide => 
+              slide.id === slideId ? { ...slide, ...updatedSlide } : slide
+            )
+          };
+        });
+      } else {
+        throw new Error("Failed to update slide");
+      }
+    } catch (error) {
+      console.error("Error updating slide:", error);
+      throw error;
+    }
   };
 
   useEffect(() => {
@@ -93,17 +128,25 @@ export default function DocumentDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading document...</p>
+        </div>
       </div>
     );
   }
 
-  if (!document) {
+  if (error || !document) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Document not found</h2>
-        <Link href="/" className="text-indigo-600 hover:text-indigo-800">Return to Dashboard</Link>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center text-red-600">
+          <p className="text-xl font-semibold">Error</p>
+          <p>{error || "Document not found"}</p>
+          <Link href="/" className="mt-4 inline-block text-blue-600 hover:underline">
+            ← Back to Documents
+          </Link>
+        </div>
       </div>
     );
   }
@@ -128,33 +171,35 @@ export default function DocumentDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="flex items-center space-x-2 text-sm text-gray-500 mb-1">
-                <Link href="/" className="hover:text-gray-900">Dashboard</Link>
-                <span>/</span>
-                <span>Documents</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900">{document.filename}</h1>
-            </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              document.status === 'SUCCESS' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-gray-500 hover:text-gray-700">
+              ← Back
+            </Link>
+            <h1 className="text-xl font-semibold text-gray-900 truncate max-w-md">
+              {document.filename}
+            </h1>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              document.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+              document.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+              'bg-yellow-100 text-yellow-800'
             }`}>
               {document.status}
             </span>
           </div>
+        </div>
 
-          {/* Tabs */}
-          <div className="flex space-x-8 border-b border-gray-200 -mb-px">
+        {/* Tabs */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex space-x-8">
             <button
               onClick={() => setActiveTab('slides')}
-              className={`pb-4 text-sm font-medium transition-colors border-b-2 ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'slides'
-                  ? 'border-indigo-600 text-indigo-600'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
@@ -162,25 +207,35 @@ export default function DocumentDetails() {
             </button>
             <button
               onClick={() => setActiveTab('quiz')}
-              className={`pb-4 text-sm font-medium transition-colors border-b-2 ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'quiz'
-                  ? 'border-indigo-600 text-indigo-600'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               Review Quiz
             </button>
+            <button
+              onClick={() => setActiveTab('chat')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'chat'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Teaching Assistant
+            </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
-
-        {/* Tab Content */}
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'slides' && (
-          <div className="w-full">
-            <SlideViewer slides={document.slides || []} />
-          </div>
+          <SlideEditor 
+            slides={document.slides || []} 
+            onSaveSlide={handleSaveSlide}
+          />
         )}
 
         {activeTab === 'quiz' && (
@@ -189,7 +244,12 @@ export default function DocumentDetails() {
           </div>
         )}
 
-      </div>
+        {activeTab === 'chat' && (
+          <div className="max-w-4xl mx-auto">
+            <ChatAssistant documentId={id} />
+          </div>
+        )}
+      </main>
     </div>
   );
 }

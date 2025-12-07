@@ -42,7 +42,6 @@ services:
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123
       MINIO_BUCKET: documents
-      GEMINI_API_KEY: AIzaSyB1neP_ijL7T-XcAciw4JD6BOVvVgqzjVc
     ports:
       - "8000:8000"
     volumes:

@@ -16,9 +16,9 @@ class LlamaParseService:
             api_key=self.api_key,
             result_type="markdown",
 
-            # MAXIMUM ACCURACY MODE
+            # MAXIMUM ACCURACY MODE - Enhanced for charts and data extraction
             parsing_instruction="""
-            This is an academic document for a micro-course. Please:
+            This is an academic document for a micro-course. CRITICAL: Extract ALL data.
 
             1. STRUCTURE: Clearly distinguish and mark:
                - Main titles (chapters)
@@ -27,20 +27,36 @@ class LlamaParseService:
                - Author fields and metadata
                - Text boxes and callouts
 
-            2. TABLES: Preserve exact table structure with proper alignment
+            2. TABLES: 
+               - Preserve exact table structure with proper alignment
+               - Extract ALL cell values, including numbers
+               - Never leave table cells empty if data is visible
 
-            3. GRAPHICS:
-               - Extract all text appearing within images, charts, and diagrams
-               - Note the position/location of text within the graphic
-               - Describe the graphic context
+            3. CHARTS AND GRAPHS (CRITICAL):
+               - This document contains bar charts, line graphs, and statistical visualizations
+               - You MUST extract the actual numerical data values from charts
+               - Read axis labels and extract all data points with their values
+               - Convert chart visuals to structured data tables
+               - Example: A bar chart showing "Rural: 65%, Urban: 85%" should output:
+                 | Category | Value |
+                 |----------|-------|
+                 | Rural    | 65%   |
+                 | Urban    | 85%   |
+               - For time series charts, include all years/periods as rows
+               - Never output empty tables - if you see a chart, extract its data
 
-            4. RELATIONSHIPS: Maintain clear hierarchy and relationships between components
+            4. DATA VALUES:
+               - Extract ALL numerical values visible in any graphic
+               - Include units (%, millions, etc.)
+               - For legends, list all categories with their values
 
-            5. FORMATTING: Preserve emphasis (bold, italic), lists, and numbering
+            5. RELATIONSHIPS: Maintain clear hierarchy and relationships between components
+
+            6. FORMATTING: Preserve emphasis (bold, italic), lists, and numbering
             """,
 
             # Use premium parsing (highest accuracy, slower)
-            # premium_mode=True,
+            premium_mode=True,
 
             # Never use cache (always fresh parse for accuracy)
             invalidate_cache=True,
