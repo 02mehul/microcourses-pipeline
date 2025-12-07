@@ -76,6 +76,17 @@ def process_document(document_id: int) -> None:
                 # Merge all pages into one text stream to avoid page break issues
                 full_text = "\n\n".join([p.text for p in parsed_pages])
 
+                # NEW: Post-process charts with Gemini Vision (for DOCX files)
+                if ext == ".docx":
+                    try:
+                        from .chart_extractor import ChartExtractor
+                        logger.info("📊 Running Gemini Vision chart extraction...")
+                        chart_extractor = ChartExtractor()
+                        full_text = chart_extractor.process_docx(temp_file_path, full_text)
+                        logger.info("✅ Chart extraction complete")
+                    except Exception as chart_err:
+                        logger.warning(f"⚠️ Chart extraction failed (continuing with original): {chart_err}")
+
                 # Save markdown to backend/docs/ for analysis and improvement
                 docs_dir = os.path.join(os.path.dirname(__file__), "../..", "docs")
                 os.makedirs(docs_dir, exist_ok=True)

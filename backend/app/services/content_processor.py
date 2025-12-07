@@ -346,7 +346,7 @@ JSON Output:"""
             logger.info("Generating all slides in single batch API call...")
             
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-pro-preview",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -444,7 +444,7 @@ JSON Output:"""
             time.sleep(1)
             
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-pro-preview",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -513,7 +513,7 @@ JSON Output:"""
             time.sleep(1)
 
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-pro-preview",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -554,7 +554,7 @@ JSON Output:"""
             time.sleep(1)
 
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",  # More stable with better rate limits
+                model="gemini-3-pro-preview",  # More stable with better rate limits
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -624,7 +624,7 @@ JSON Output:"""
 
             # Create chat session
             chat = self.client.chats.create(
-                model="gemini-2.5-flash",
+                model="gemini-3-pro-preview",
                 history=chat_history,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,

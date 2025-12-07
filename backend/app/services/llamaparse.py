@@ -55,6 +55,7 @@ class LlamaParseService:
             6. FORMATTING: Preserve emphasis (bold, italic), lists, and numbering
             """,
 
+            parse_mode="parse_document_with_agent",
             # Use premium parsing (highest accuracy, slower)
             premium_mode=True,
 
