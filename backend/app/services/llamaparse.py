@@ -15,7 +15,7 @@ class LlamaParseService:
         self.parser = LlamaParse(
             api_key=self.api_key,
             result_type="markdown",
-
+            parse_mode="parse_document_with_llm",
             # MAXIMUM ACCURACY MODE - Enhanced for charts and data extraction
             parsing_instruction="""
             This is an academic document for a micro-course. CRITICAL: Extract ALL data.
@@ -37,6 +37,7 @@ class LlamaParseService:
                - You MUST extract the actual numerical data values from charts
                - Read axis labels and extract all data points with their values
                - Convert chart visuals to structured data tables
+               - Identify all data points and their values and add them in the table just as the example we need the highest accuracy understand each graphics with full details26
                - Example: A bar chart showing "Rural: 65%, Urban: 85%" should output:
                  | Category | Value |
                  |----------|-------|
