@@ -10,65 +10,74 @@ class LlamaParseService:
         if not self.api_key or self.api_key == "llx-...":
             raise ValueError("LLAMA_CLOUD_API_KEY is not set")
 
-        # MAXIMUM ACCURACY CONFIGURATION
-        # Optimized for academic documents (research papers, course materials)
+        # Get OpenAI API key for multimodal parsing (chart extraction)
+        self.openai_api_key = settings.OPENAI_API_KEY
+
+        # GPT-4o VISION MODE - Best for chart/graph data extraction
+        # Uses OpenAI's GPT-4o for superior visual understanding of charts
         self.parser = LlamaParse(
             api_key=self.api_key,
             result_type="markdown",
-            parse_mode="parse_document_with_llm",
-            # MAXIMUM ACCURACY MODE - Enhanced for charts and data extraction
+            
+            # Use document-level LVM for better cross-page context
+            parse_mode="parse_document_with_lvm",
+            
+            # CRITICAL: Use GPT-4o for multimodal parsing (best for charts)
+            use_vendor_multimodal_model=True,
+            vendor_multimodal_model_name="openai-gpt-5",
+            vendor_multimodal_api_key=self.openai_api_key,
+            
+            # Enable chart extraction
+            extract_charts=True,
+            
+            # Enable layout/figure extraction
+            extract_layout=True,
+            
+            # Enhanced extraction features
+            high_res_ocr=True,  # High resolution OCR
+            adaptive_long_table=True,  # Detect and adapt long tables
+            outlined_table_extraction=True,  # Extract outlined tables
+            output_tables_as_HTML=True,  # Output tables as HTML in markdown
+            
+            # Layout preservation for accurate structure
+            preserve_layout_alignment_across_pages=True,
+            preserve_very_small_text=True,  # Capture small text in charts/legends
+            
+            # Cross-page context preservation
+            continuous_mode=True,
+            
+            # Premium accuracy mode
+            premium_mode=True,
+            
+            # Parsing instructions for GPT-4o Vision
             parsing_instruction="""
-            This is an academic document for a micro-course. CRITICAL: Extract ALL data.
-
-            1. STRUCTURE: Clearly distinguish and mark:
-               - Main titles (chapters)
-               - Subtitles (sections/subsections)
-               - Paragraph text
-               - Author fields and metadata
-               - Text boxes and callouts
-
-            2. TABLES: 
-               - Preserve exact table structure with proper alignment
-               - Extract ALL cell values, including numbers
+            You are analyzing an academic research document with charts and graphs.
+            
+            CRITICAL REQUIREMENTS:
+            
+            1. CHARTS & GRAPHS - Extract ALL numerical data:
+               - Read bar chart values from the y-axis
+               - Read line graph data points for each year/period
+               - Extract scatter plot coordinates
+               - Convert ALL visual data into structured markdown tables
+               - Example: Bar chart with "Sweden: 0.92, Germany: 0.85" becomes:
+                 | Country | Equality Index |
+                 |---------|----------------|
+                 | Sweden  | 0.92           |
+                 | Germany | 0.85           |
+            
+            2. TABLES - Fill ALL cells:
                - Never leave table cells empty if data is visible
-
-            3. CHARTS AND GRAPHS (CRITICAL):
-               - This document contains bar charts, line graphs, and statistical visualizations
-               - You MUST extract the actual numerical data values from charts
-               - Read axis labels and extract all data points with their values
-               - Convert chart visuals to structured data tables
-               - Identify all data points and their values and add them in the table just as the example we need the highest accuracy understand each graphics with full details26
-               - Example: A bar chart showing "Rural: 65%, Urban: 85%" should output:
-                 | Category | Value |
-                 |----------|-------|
-                 | Rural    | 65%   |
-                 | Urban    | 85%   |
-               - For time series charts, include all years/periods as rows
-               - Never output empty tables - if you see a chart, extract its data
-
-            4. DATA VALUES:
-               - Extract ALL numerical values visible in any graphic
-               - Include units (%, millions, etc.)
-               - For legends, list all categories with their values
-
-            5. RELATIONSHIPS: Maintain clear hierarchy and relationships between components
-
-            6. FORMATTING: Preserve emphasis (bold, italic), lists, and numbering
+               - Extract exact numeric values
+            
+            3. STRUCTURE: Preserve document hierarchy
+            
+            4. ACCURACY: Double-check all extracted numbers against the visual
             """,
 
-            # Use premium parsing (highest accuracy, slower)
-            premium_mode=True,
-
-            # Never use cache (always fresh parse for accuracy)
+            # Fresh parse
             invalidate_cache=True,
-
-            # Don't skip any content
             skip_diagonal_text=False,
-
-            # Parse embedded objects (images, tables) using best vision model
-            vendor_multimodal_model_name="openai-gpt4o",
-
-            # Verbose output for debugging
             verbose=True,
         )
 

@@ -165,6 +165,30 @@ class MarkdownParser:
                     "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0}
                 }
 
+        elif node_type == "block_code":
+            # Handle code blocks
+            text = node.get("raw", "")
+            return {
+                "type": "text",
+                "semantic_role": "code_block",
+                "text_raw": text,
+                "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0}
+            }
+
+        elif node_type == "block_quote":
+            # Handle block quotes
+            text = self._get_text_content(node)
+            return {
+                "type": "text",
+                "semantic_role": "quote",
+                "text_raw": text,
+                "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0}
+            }
+
+        elif node_type == "thematic_break":
+            # Handle horizontal rules (---) - skip as they're structural only
+            return None
+
         return None
 
     def _get_text_content(self, node: Dict[str, Any]) -> str:

@@ -61,8 +61,7 @@ def process_document(document_id: int) -> None:
                 temp_file_path = temp_file.name
 
             try:
-                # Call LlamaParse
-                logger.info("🚀 Sending to LlamaParse...")
+                logger.info("🚀 Sending for parsing...")
                 llama_service = LlamaParseService()
                 # Returns List[Document] where each doc is a page
 
@@ -118,6 +117,7 @@ def process_document(document_id: int) -> None:
                         bbox=block_data["bbox"],
                         parent_block_id=None,
                         table_data=block_data.get("table_data"),
+                        hierarchy_level=block_data.get("hierarchy_level"),
                     )
                     db.add(db_block)
                     db_blocks.append(db_block)
@@ -167,30 +167,66 @@ def process_document(document_id: int) -> None:
                     table_info = " (with table)" if slide_data.get("has_table") else ""
                     logger.info(f"Saved slide {i+1}: {slide_data.get('title')}{table_info}")
 
-                # Generate Questions for the entire document
-                logger.info("❓ Generating review questions for the document...")
+                # Generate Questions for EACH subchapter (Milestone 3: 3-4 questions per subchapter)
+                logger.info("❓ Generating review questions per subchapter...")
                 
-                # Combine all blocks into full content for question generation
-                full_document_content = "\n\n".join([
-                    block.text_raw for block in db_blocks if block.text_raw
-                ])[:3000]  # Limit to first 3000 chars for context
+                # Detect subchapters from blocks
+                subchapters = processor.detect_subchapters(db_blocks)
+                total_questions = 0
                 
-                questions_data = processor.generate_questions_for_subchapter(full_document_content)
-                
-                # Attach questions to the LAST slide
-                if db_slides and questions_data:
-                    last_slide = db_slides[-1]
+                for subchapter in subchapters:
+                    subchapter_blocks = subchapter.get("blocks", [])
+                    if not subchapter_blocks:
+                        continue
+                    
+                    # Combine subchapter content for question generation
+                    subchapter_content = "\n\n".join([
+                        block.text_raw for block in subchapter_blocks if block.text_raw
+                    ])[:8000]  # Limit per subchapter (increased from 4000)
+                    
+                    if len(subchapter_content.strip()) < 50:
+                        logger.info(f"Skipping subchapter '{subchapter.get('subchapter_title')}' - too little content")
+                        continue
+                    
+                    # Generate 3-4 questions for this subchapter
+                    questions_data = processor.generate_questions_for_subchapter(subchapter_content)
+                    
+                    if not questions_data:
+                        logger.warning(f"No questions generated for subchapter: {subchapter.get('subchapter_title')}")
+                        continue
+                    
+                    # Find the slide(s) that belong to this subchapter
+                    subchapter_id = subchapter.get("id")
+                    subchapter_title = subchapter.get("subchapter_title", "")
+                    
+                    # Distribute questions across slides proportionally
+                    # Since batch slides don't have matching subchapter_ids, assign based on position
+                    subchapter_index = subchapters.index(subchapter)
+                    if db_slides and len(subchapters) > 0:
+                        # Map subchapter to slide proportionally
+                        slide_index = min(
+                            int(subchapter_index * len(db_slides) / len(subchapters)),
+                            len(db_slides) - 1
+                        )
+                        target_slide = db_slides[slide_index]
+                    else:
+                        target_slide = None
+                    
                     for q_data in questions_data:
                         db_question = Question(
                             document_id=document_id,
-                            slide_id=last_slide.id,
+                            slide_id=target_slide.id if target_slide else None,
                             question_text=q_data.get("question_text"),
                             answer_text=q_data.get("answer_text"),
-                            subchapter_id=last_slide.subchapter_id,
-                            subchapter_title="Document Review"
+                            subchapter_id=subchapter_id,
+                            subchapter_title=subchapter_title
                         )
                         db.add(db_question)
-                    logger.info(f"Generated {len(questions_data)} questions for document")
+                        total_questions += 1
+                    
+                    logger.info(f"Generated {len(questions_data)} questions for subchapter: {subchapter_title}")
+                
+                logger.info(f"✅ Total questions generated: {total_questions} across {len(subchapters)} subchapters")
 
                 db.commit()
 

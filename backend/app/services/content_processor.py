@@ -66,6 +66,18 @@ class ContentProcessor:
         current_subchapter = None
         current_blocks = []
 
+        # Patterns that indicate section/subchapter boundaries in LlamaParse output
+        section_patterns = [
+            r'^Figure \d+',              # "Figure 1 — Title"
+            r'^Chart \d+',               # "Chart 1 — Title"
+            r'^Table \d+',               # "Table 1 — Title"
+            r'^Section:',                # "Section: Title"
+            r'^Document section:',       # "Document section: Title"
+            r'^Box —',                   # "Box — Title"
+            r'^\d+\.\s+[A-Z]',           # "1. Title" numbered sections
+        ]
+        section_regex = re.compile('|'.join(section_patterns), re.IGNORECASE)
+
         for block in blocks:
             # Skip non-text blocks for hierarchy detection
             if not block.text_raw or not block.semantic_role:
@@ -87,7 +99,7 @@ class ContentProcessor:
                 current_chapter = text
                 current_subchapter = None
 
-            # Detect subchapter/section heading (H2, H3)
+            # Detect subchapter/section heading (H2, H3) OR pattern-based detection
             elif role == "section_heading" or (block.hierarchy_level and block.hierarchy_level >= 1):
                 # Save previous subchapter if exists
                 if current_subchapter and current_blocks:
@@ -100,6 +112,25 @@ class ContentProcessor:
                     "id": subchapter_id,
                     "chapter_title": current_chapter or "Introduction",
                     "subchapter_title": text,
+                    "blocks": []
+                }
+                current_blocks = [block]
+
+            # Pattern-based section detection for LlamaParse output without markdown headings
+            elif section_regex.match(text):
+                # Save previous subchapter if exists
+                if current_subchapter and current_blocks:
+                    current_subchapter["blocks"] = current_blocks
+                    subchapters.append(current_subchapter)
+
+                # New subchapter from pattern match
+                subchapter_id = f"ch{len(subchapters) + 1}"
+                # Extract clean title (first 80 chars, trim at sentence end if possible)
+                title = text[:80].split('\n')[0]
+                current_subchapter = {
+                    "id": subchapter_id,
+                    "chapter_title": current_chapter or "Document Content",
+                    "subchapter_title": title,
                     "blocks": []
                 }
                 current_blocks = [block]
@@ -121,8 +152,8 @@ class ContentProcessor:
                 "blocks": current_blocks
             })
 
-        # Limit to max 7 subchapters (Milestone requirement update)
-        MAX_SUBCHAPTERS = 7
+        # Limit to max 8 subchapters (updated for more comprehensive coverage)
+        MAX_SUBCHAPTERS = 8
         if len(subchapters) > MAX_SUBCHAPTERS:
             logger.info(f"Detected {len(subchapters)} subchapters, merging to max {MAX_SUBCHAPTERS}...")
             
@@ -291,7 +322,7 @@ class ContentProcessor:
 
 INSTRUCTIONS:
 1. Read through ALL the content carefully
-2. Determine the optimal number of slides needed (typically 5-10, but use your judgment)
+2. Create UP TO 8 slides maximum (aim for 6-8 slides for comprehensive coverage)
 3. Create slides that cover the key topics, concepts, and insights
 4. For EACH slide, decide if including a small table would enhance understanding
 5. Only include a table if:
@@ -338,7 +369,7 @@ EXAMPLE OUTPUT:
 }}
 
 DOCUMENT CONTENT (includes [TABLE_DATA] for available tables):
-{full_content[:15000]}
+{full_content[:25000]}
 
 JSON Output:"""
 
@@ -346,7 +377,7 @@ JSON Output:"""
             logger.info("Generating all slides in single batch API call...")
             
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -444,7 +475,7 @@ JSON Output:"""
             time.sleep(1)
             
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -495,7 +526,7 @@ JSON Output:"""
         """
         Generate 3-4 review questions for an entire subchapter (Milestone 3 requirement).
         """
-        prompt = f"""You are an expert educational content creator. Create 3-4 comprehensive review questions for this subchapter.
+        prompt = f"""You are an expert educational content creator. Create 4-5 comprehensive review questions for this subchapter.
 
 These questions should test understanding of the ENTIRE subchapter content, not just individual slides.
 
@@ -513,7 +544,7 @@ JSON Output:"""
             time.sleep(1)
 
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -554,7 +585,7 @@ JSON Output:"""
             time.sleep(1)
 
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",  # More stable with better rate limits
+                model="gemini-2.5-pro",  # More stable with better rate limits
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -624,7 +655,7 @@ JSON Output:"""
 
             # Create chat session
             chat = self.client.chats.create(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 history=chat_history,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,

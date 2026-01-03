@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     LLAMA_CLOUD_API_KEY: str = "llx-..."  # Set in .env
     GEMINI_API_KEY: str = ""  # Set in .env - required for slide/question generation
+    OPENAI_API_KEY: str = ""  # Set in .env - required for LlamaParse multimodal parsing
 
     class Config:
         # This is relative to the directory where you run uvicorn (backend/)
