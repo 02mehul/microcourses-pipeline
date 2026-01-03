@@ -2,6 +2,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    Text,
     DateTime,
     ForeignKey,
     JSON,
@@ -23,6 +24,7 @@ class Document(Base):
     checksum = Column(String, nullable=True, index=True)
     status = Column(String, nullable=False, default="PENDING")  # PENDING/RUNNING/...
     created_at = Column(DateTime, default=datetime.utcnow)
+    raw_markdown = Column(Text, nullable=True)  # Parsed markdown from LlamaParse
 
     pages = relationship("Page", back_populates="document", cascade="all, delete-orphan")
 

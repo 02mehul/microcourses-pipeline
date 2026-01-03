@@ -9,7 +9,7 @@ from ..db import SessionLocal
 from .. import models
 from .. import schemas
 from ..services import storage
-from ..services.pipeline import process_document
+from ..services.pipeline import process_document, reprocess_document_from_markdown
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -140,6 +140,37 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
+
+
+@router.get("/{document_id}/raw")
+def get_raw_markdown(document_id: int, db: Session = Depends(get_db)):
+    """Get the raw parsed markdown for editing."""
+    doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"raw_markdown": doc.raw_markdown or ""}
+
+
+@router.put("/{document_id}/raw")
+def update_raw_markdown(
+    document_id: int,
+    body: schemas.RawMarkdownUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Update raw markdown and retrigger full processing pipeline."""
+    doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Set status to RUNNING immediately
+    doc.status = "RUNNING"
+    db.commit()
+    
+    # Run reprocessing in background
+    background_tasks.add_task(reprocess_document_from_markdown, document_id, body.raw_markdown)
+    
+    return {"message": "Reprocessing started", "status": "RUNNING"}
 
 
 @router.get("/{document_id}/blocks")

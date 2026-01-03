@@ -127,6 +127,11 @@ class ChatResponse(BaseModel):
 
 
 
+class RawMarkdownUpdate(BaseModel):
+    """Schema for updating raw markdown content."""
+    raw_markdown: str
+
+
 class DocumentDetailResponse(BaseModel):
     """
     Complete document details with all extracted content.
@@ -139,6 +144,7 @@ class DocumentDetailResponse(BaseModel):
     checksum: str
     status: str
     created_at: datetime
+    raw_markdown: Optional[str] = None
     pages: List[PageResponse] = []
     slides: List[SlideResponse] = []
     questions: List[QuestionResponse] = []
