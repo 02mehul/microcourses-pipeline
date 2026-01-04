@@ -148,6 +148,49 @@ class DocumentDetailResponse(BaseModel):
     pages: List[PageResponse] = []
     slides: List[SlideResponse] = []
     questions: List[QuestionResponse] = []
+    summary: Optional["DocumentSummaryResponse"] = None
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentStatsSchema(BaseModel):
+    """Document statistics for visual display."""
+    word_count: int
+    reading_time_minutes: int
+    page_count: int
+    complexity_score: float  # 1-10 scale
+    block_count: int
+    table_count: int
+    image_count: int
+
+
+class KeyConceptSchema(BaseModel):
+    """Key concept extracted from document for chart visualization."""
+    name: str
+    importance: float  # 0-100 scale
+    frequency: int
+    category: Optional[str] = None
+
+
+class TopicDistributionSchema(BaseModel):
+    """Topic distribution data for pie/area charts."""
+    section: str
+    topic: str
+    weight: float
+
+
+class DocumentSummaryResponse(BaseModel):
+    """Complete document summary with all visual data."""
+    id: int
+    document_id: int
+    executive_summary: Optional[str] = None
+    stats: Optional[DocumentStatsSchema] = None
+    key_concepts: List[KeyConceptSchema] = []
+    topic_distribution: List[TopicDistributionSchema] = []
+    main_takeaways: List[str] = []
+    learning_objectives: List[str] = []
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

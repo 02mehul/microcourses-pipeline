@@ -69,6 +69,33 @@ export default function DocumentList() {
     router.push(`/documents/${docId}`);
   };
 
+  const handleDelete = async (e: React.MouseEvent, docId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpenMenuId(null);
+
+    // Confirm before deleting
+    if (!window.confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:8000/documents/${docId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        // Remove from local state
+        setDocuments((prev) => prev.filter((doc) => doc.document_id !== docId));
+      } else {
+        alert("Failed to delete document. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      alert("An error occurred while deleting the document.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -101,37 +128,39 @@ export default function DocumentList() {
               key={doc.document_id}
               className="block group relative bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-indigo-300 transition-all duration-200"
             >
-              <Link href={`/documents/${doc.document_id}`} className="block p-6">
-                <div className="flex items-center justify-between mb-4">
+              <Link href={`/documents/${doc.document_id}`} className="block p-6 pr-12">
+                <div className="flex items-start gap-3 mb-4">
                   <div className={`p-2 rounded-lg ${doc.filename.endsWith('.pdf') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
                     </svg>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        doc.status === "SUCCESS"
-                          ? "bg-green-100 text-green-800"
-                          : doc.status === "FAILED"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {doc.status}
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-gray-900 truncate mb-1" title={doc.filename}>
+                      {doc.filename}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          doc.status === "SUCCESS"
+                            ? "bg-green-100 text-green-800"
+                            : doc.status === "FAILED"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {doc.status}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(doc.created_at).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-gray-900 truncate mb-1" title={doc.filename}>
-                  {doc.filename}
-                </h3>
-                <p className="text-xs text-gray-500">
-                  {new Date(doc.created_at).toLocaleDateString(undefined, {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                  })}
-                </p>
               </Link>
               
               {/* Three-dot menu */}
@@ -160,13 +189,23 @@ export default function DocumentList() {
                     </button>
                     <button
                       onClick={(e) => handleEditRaw(e, doc.document_id)}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={doc.status !== "SUCCESS"}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                       Edit Raw Document
+                    </button>
+                    <div className="border-t border-gray-100 my-1"></div>
+                    <button
+                      onClick={(e) => handleDelete(e, doc.document_id)}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete Document
                     </button>
                   </div>
                 )}

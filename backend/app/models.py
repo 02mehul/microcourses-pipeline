@@ -115,6 +115,35 @@ class Question(Base):
     document = relationship("Document", back_populates="questions")
     slide = relationship("Slide", back_populates="questions")
 
-# Update Document relationship
+
+class DocumentSummary(Base):
+    """Stores visual summary data for a document including stats, charts, and insights."""
+    __tablename__ = "document_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
+
+    # Executive Summary
+    executive_summary = Column(Text, nullable=True)
+
+    # Statistics (stored as JSON for flexibility)
+    stats = Column(JSON, nullable=True)  # {word_count, reading_time_minutes, page_count, complexity_score, etc.}
+
+    # Visual Data for Charts
+    key_concepts = Column(JSON, nullable=True)  # [{name, importance, frequency, category}]
+    topic_distribution = Column(JSON, nullable=True)  # [{section, topic, weight}]
+
+    # Insights
+    main_takeaways = Column(JSON, nullable=True)  # ["takeaway1", "takeaway2", ...]
+    learning_objectives = Column(JSON, nullable=True)  # ["objective1", "objective2", ...]
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    document = relationship("Document", back_populates="summary")
+
+# Update Document relationships
 Document.slides = relationship("Slide", back_populates="document", cascade="all, delete-orphan")
 Document.questions = relationship("Question", back_populates="document", cascade="all, delete-orphan")
+Document.summary = relationship("DocumentSummary", back_populates="document", uselist=False, cascade="all, delete-orphan")

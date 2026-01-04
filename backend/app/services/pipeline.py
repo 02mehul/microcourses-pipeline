@@ -15,9 +15,10 @@ from sqlalchemy.orm import Session
 
 import io
 from .storage import download_bytes, upload_fileobj
-from ..models import Document, Page, Block
+from ..models import Document, Page, Block, DocumentSummary
 from .llamaparse import LlamaParseService
 from .markdown_parser import MarkdownParser
+from .summary_generator import SummaryGenerator
 
 from ..db import SessionLocal
 
@@ -232,6 +233,42 @@ def process_document(document_id: int) -> None:
                 
                 logger.info(f"✅ Total questions generated: {total_questions} across {len(subchapters)} subchapters")
 
+                # --- Document Summary Generation ---
+                logger.info("📊 Generating document summary...")
+                try:
+                    summary_generator = SummaryGenerator()
+                    page_count = len(parsed_pages) if parsed_pages else 1
+                    summary_data = summary_generator.create_full_summary(db_blocks, page_count)
+                    
+                    # Create or update summary record
+                    existing_summary = db.query(DocumentSummary).filter(
+                        DocumentSummary.document_id == document_id
+                    ).first()
+                    
+                    if existing_summary:
+                        existing_summary.executive_summary = summary_data["executive_summary"]
+                        existing_summary.stats = summary_data["stats"]
+                        existing_summary.key_concepts = summary_data["key_concepts"]
+                        existing_summary.topic_distribution = summary_data["topic_distribution"]
+                        existing_summary.main_takeaways = summary_data["main_takeaways"]
+                        existing_summary.learning_objectives = summary_data["learning_objectives"]
+                    else:
+                        db_summary = DocumentSummary(
+                            document_id=document_id,
+                            executive_summary=summary_data["executive_summary"],
+                            stats=summary_data["stats"],
+                            key_concepts=summary_data["key_concepts"],
+                            topic_distribution=summary_data["topic_distribution"],
+                            main_takeaways=summary_data["main_takeaways"],
+                            learning_objectives=summary_data["learning_objectives"]
+                        )
+                        db.add(db_summary)
+                    
+                    logger.info("✅ Document summary generated successfully")
+                except Exception as summary_error:
+                    logger.warning(f"⚠️ Summary generation failed (non-critical): {summary_error}")
+                    # Don't fail the whole pipeline if summary fails
+
                 db.commit()
 
             finally:
@@ -402,6 +439,33 @@ def reprocess_document_from_markdown(document_id: int, new_markdown: str) -> Non
                     total_questions += 1
             
             logger.info(f"✅ Total questions generated: {total_questions}")
+
+            # --- Document Summary Generation ---
+            logger.info("📊 Generating document summary...")
+            try:
+                summary_generator = SummaryGenerator()
+                page_count = 1  # Reprocessing uses single page
+                summary_data = summary_generator.create_full_summary(db_blocks, page_count)
+                
+                # Delete existing summary if any
+                db.query(DocumentSummary).filter(
+                    DocumentSummary.document_id == document_id
+                ).delete()
+                
+                db_summary = DocumentSummary(
+                    document_id=document_id,
+                    executive_summary=summary_data["executive_summary"],
+                    stats=summary_data["stats"],
+                    key_concepts=summary_data["key_concepts"],
+                    topic_distribution=summary_data["topic_distribution"],
+                    main_takeaways=summary_data["main_takeaways"],
+                    learning_objectives=summary_data["learning_objectives"]
+                )
+                db.add(db_summary)
+                
+                logger.info("✅ Document summary generated successfully")
+            except Exception as summary_error:
+                logger.warning(f"⚠️ Summary generation failed (non-critical): {summary_error}")
 
             db.commit()
 

@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import SlideEditor from "@/components/SlideEditor";
 import QuizViewer from "@/components/QuizViewer";
 import ChatAssistant from "@/components/ChatAssistant";
+import SummaryViewer from "@/components/SummaryViewer";
 
 interface TableData {
   headers: string[];
@@ -36,12 +37,48 @@ interface Question {
   subchapter_title?: string;
 }
 
+interface DocumentStats {
+  word_count: number;
+  reading_time_minutes: number;
+  page_count: number;
+  complexity_score: number;
+  block_count: number;
+  table_count: number;
+  image_count: number;
+}
+
+interface KeyConcept {
+  name: string;
+  importance: number;
+  frequency: number;
+  category?: string;
+}
+
+interface TopicDistribution {
+  section: string;
+  topic: string;
+  weight: number;
+}
+
+interface DocumentSummary {
+  id: number;
+  document_id: number;
+  executive_summary?: string;
+  stats?: DocumentStats;
+  key_concepts: KeyConcept[];
+  topic_distribution: TopicDistribution[];
+  main_takeaways: string[];
+  learning_objectives: string[];
+  created_at?: string;
+}
+
 interface DocumentDetail {
   id: number;
   filename: string;
   status: string;
   slides?: Slide[];
   questions?: Question[];
+  summary?: DocumentSummary | null;
 }
 
 export default function DocumentDetails() {
@@ -51,7 +88,7 @@ export default function DocumentDetails() {
   const [document, setDocument] = useState<DocumentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'slides' | 'quiz' | 'chat'>('slides');
+  const [activeTab, setActiveTab] = useState<'summary' | 'slides' | 'quiz' | 'chat'>('summary');
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
   const fetchDocument = async () => {
@@ -196,6 +233,16 @@ export default function DocumentDetails() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8">
             <button
+              onClick={() => setActiveTab('summary')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'summary'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Summary
+            </button>
+            <button
               onClick={() => setActiveTab('slides')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'slides'
@@ -231,6 +278,12 @@ export default function DocumentDetails() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'summary' && (
+          <div className="max-w-6xl mx-auto">
+            <SummaryViewer summary={document.summary} documentId={document.id} />
+          </div>
+        )}
+
         {activeTab === 'slides' && (
           <SlideEditor 
             slides={document.slides || []} 
@@ -246,7 +299,7 @@ export default function DocumentDetails() {
 
         {activeTab === 'chat' && (
           <div className="max-w-4xl mx-auto">
-            <ChatAssistant documentId={id} />
+            <ChatAssistant documentId={document.id} />
           </div>
         )}
       </main>
