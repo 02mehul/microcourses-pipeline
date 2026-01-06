@@ -45,6 +45,7 @@ def process_document(document_id: int) -> None:
         try:
             # Set status to RUNNING
             document.status = "RUNNING"
+            document.status_message = "Extracting content from document..."
             db.commit()
 
             # Download PDF from MinIO
@@ -132,6 +133,9 @@ def process_document(document_id: int) -> None:
 
                 # --- Milestone 3: Content Processing ---
                 logger.info("🎬 Starting content processing (Batch Slide Generation)...")
+                document.status_message = "Generating slides from content..."
+                db.commit()
+
                 from .content_processor import ContentProcessor
                 from ..models import Slide, Question
 
@@ -174,7 +178,9 @@ def process_document(document_id: int) -> None:
 
                 # Generate Questions for EACH subchapter (Milestone 3: 3-4 questions per subchapter)
                 logger.info("❓ Generating review questions per subchapter...")
-                
+                document.status_message = "Creating review questions..."
+                db.commit()
+
                 # Detect subchapters from blocks
                 subchapters = processor.detect_subchapters(db_blocks)
                 total_questions = 0
@@ -235,6 +241,9 @@ def process_document(document_id: int) -> None:
 
                 # --- Document Summary Generation ---
                 logger.info("📊 Generating document summary...")
+                document.status_message = "Building summary and insights..."
+                db.commit()
+
                 try:
                     summary_generator = SummaryGenerator()
                     page_count = len(parsed_pages) if parsed_pages else 1
@@ -278,12 +287,14 @@ def process_document(document_id: int) -> None:
 
             # Set status to SUCCESS
             document.status = "SUCCESS"
+            document.status_message = None
             db.commit()
             logger.info(f"🎉 Document {document_id} processed successfully")
 
         except Exception as e:
             logger.error(f"Error processing document {document_id}: {str(e)}", exc_info=True)
             document.status = "FAILED"
+            document.status_message = f"Error: {str(e)[:100]}"
             db.commit()
 
 

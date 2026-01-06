@@ -18,6 +18,8 @@ import {
   RefreshCw,
   BookOpen,
 } from "lucide-react";
+import { toast } from "sonner";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface DocumentStats {
   word_count: number;
@@ -75,23 +77,27 @@ export default function SummaryViewer({
   documentId,
 }: SummaryViewerProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
 
-  const handleRegenerate = async () => {
+  const handleRegenerateClick = () => {
+    setRegenerateDialogOpen(true);
+  };
+
+  const confirmRegenerate = async () => {
     setIsRegenerating(true);
-    try {
-      await fetch(
-        `http://localhost:8000/documents/${documentId}/summary/regenerate`,
-        {
-          method: "POST",
-        }
-      );
+
+    const regeneratePromise = fetch(
+      `http://localhost:8000/documents/${documentId}/summary/regenerate`,
+      {
+        method: "POST",
+      }
+    ).then(async (res) => {
+      if (!res.ok) throw new Error("Failed to regenerate");
 
       // Poll for updated summary without full page reload
-      const pollForSummary = async (attempts = 0, maxAttempts = 15) => {
+      const pollForSummary = async (attempts = 0, maxAttempts = 15): Promise<void> => {
         if (attempts >= maxAttempts) {
-          console.error("Summary regeneration timed out");
-          setIsRegenerating(false);
-          return;
+          throw new Error("Summary regeneration timed out");
         }
 
         try {
@@ -103,20 +109,26 @@ export default function SummaryViewer({
             window.location.reload();
           } else {
             // Not ready yet, try again
-            setTimeout(() => pollForSummary(attempts + 1, maxAttempts), 2000);
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            return pollForSummary(attempts + 1, maxAttempts);
           }
         } catch (err) {
           // Retry on error
-          setTimeout(() => pollForSummary(attempts + 1, maxAttempts), 2000);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          return pollForSummary(attempts + 1, maxAttempts);
         }
       };
 
       // Start polling after a short delay
-      setTimeout(() => pollForSummary(), 2000);
-    } catch (error) {
-      console.error("Failed to regenerate summary:", error);
-      setIsRegenerating(false);
-    }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await pollForSummary();
+    });
+
+    toast.promise(regeneratePromise, {
+      loading: "Regenerating summary...",
+      success: "Summary regenerated successfully",
+      error: "Failed to regenerate summary",
+    });
   };
 
   if (!summary) {
@@ -134,9 +146,9 @@ export default function SummaryViewer({
             below to generate it now.
           </p>
           <button
-            onClick={handleRegenerate}
+            onClick={handleRegenerateClick}
             disabled={isRegenerating}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isRegenerating ? (
               <>
@@ -171,9 +183,9 @@ export default function SummaryViewer({
           </p>
         </div>
         <button
-          onClick={handleRegenerate}
+          onClick={handleRegenerateClick}
           disabled={isRegenerating}
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RefreshCw
             className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`}
@@ -305,6 +317,17 @@ export default function SummaryViewer({
             </div>
           )}
       </div>
+
+      <ConfirmDialog
+        isOpen={regenerateDialogOpen}
+        onClose={() => setRegenerateDialogOpen(false)}
+        onConfirm={confirmRegenerate}
+        title="Regenerate Summary"
+        message="Are you sure you want to regenerate the summary? This will replace the current summary with a new AI-generated version."
+        confirmText="Regenerate"
+        cancelText="Cancel"
+        variant="warning"
+      />
     </div>
   );
 }

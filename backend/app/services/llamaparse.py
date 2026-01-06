@@ -11,27 +11,26 @@ class LlamaParseService:
             raise ValueError("LLAMA_CLOUD_API_KEY is not set")
 
         # Get OpenAI API key for multimodal parsing (chart extraction)
-        self.openai_api_key = settings.OPENAI_API_KEY
+        # self.openai_api_key = settings.OPENAI_API_KEY
 
         # GPT-4o VISION MODE - Best for chart/graph data extraction
         # Uses OpenAI's GPT-4o for superior visual understanding of charts
         # Region configuration - uncomment the appropriate one for your API key:
         # US (default): https://api.cloud.llamaindex.ai
         # EU: https://api.cloud.llamaindex.ai/eu
-        base_url = "https://api.cloud.llamaindex.ai"  # Change to EU if needed
         
         self.parser = LlamaParse(
-            api_key=self.api_key,
-            base_url=base_url,
+            api_key="llx-CGSsDhPcsm9VEblAxyTuKvbemleCSWItxnK2I1BNnwYgSO95",
             result_type="markdown",
             
             # Use document-level LVM for better cross-page context
             parse_mode="parse_document_with_lvm",
-            
-            # CRITICAL: Use GPT-4o for multimodal parsing (best for charts)
             use_vendor_multimodal_model=True,
-            vendor_multimodal_model_name="openai-gpt-5-nano",
-            vendor_multimodal_api_key=self.openai_api_key,
+
+            # CRITICAL: Use GPT-4o for multimodal parsing (best for charts)
+            # use_vendor_multimodal_model=True,
+            # vendor_multimodal_model_name="openai-gpt-5-nano",
+            # vendor_multimodal_api_key=self.openai_api_key,
             
             # Enable chart extraction
             extract_charts=True,

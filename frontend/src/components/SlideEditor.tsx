@@ -140,7 +140,7 @@ export default function SlideEditor({ slides, onSaveSlide }: SlideEditorProps) {
       </div>
 
       {/* Slide Content */}
-      <div className="p-6 sm:p-10 bg-linear-to-br from-white to-indigo-50/30 min-h-[750px] flex flex-col">
+      <div className="p-4 sm:py-2 sm:px-4 bg-linear-to-br from-white to-indigo-50/30 min-h-[500px] flex flex-col">
         <div className="w-full flex-1 flex flex-col justify-center px-4 sm:px-8">
           {/* Chapter/Subchapter Context */}
           {(currentSlide.chapter_title || currentSlide.subchapter_title) && (
@@ -198,7 +198,7 @@ export default function SlideEditor({ slides, onSaveSlide }: SlideEditorProps) {
           {/* Content: Key Points + Optional Table */}
           <div className={`grid gap-5 ${currentSlide.has_table && currentSlide.table_data ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
             {/* Key Points */}
-            <div className="bg-white p-5 sm:p-6 rounded-lg shadow-sm border border-gray-100">
+            <div>
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 Key Points
               </h4>
@@ -229,7 +229,7 @@ export default function SlideEditor({ slides, onSaveSlide }: SlideEditorProps) {
 
             {/* Table (if present) - Read Only for now */}
             {currentSlide.has_table && currentSlide.table_data && (
-              <div className="bg-white p-5 sm:p-6 rounded-lg shadow-sm border border-gray-100">
+              <div>
                 {currentSlide.table_data.caption && (
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                     {currentSlide.table_data.caption}

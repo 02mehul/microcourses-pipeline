@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Document {
   document_id: number;
@@ -15,6 +17,8 @@ export default function DocumentList() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -69,31 +73,33 @@ export default function DocumentList() {
     router.push(`/documents/${docId}`);
   };
 
-  const handleDelete = async (e: React.MouseEvent, docId: number) => {
+  const handleDelete = (e: React.MouseEvent, docId: number) => {
     e.preventDefault();
     e.stopPropagation();
     setOpenMenuId(null);
+    setDocumentToDelete(docId);
+    setDeleteDialogOpen(true);
+  };
 
-    // Confirm before deleting
-    if (!window.confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
-      return;
-    }
+  const confirmDelete = async () => {
+    if (!documentToDelete) return;
 
-    try {
-      const res = await fetch(`http://localhost:8000/documents/${docId}`, {
-        method: "DELETE",
-      });
+    const docId = documentToDelete;
+    const deletePromise = fetch(`http://localhost:8000/documents/${docId}`, {
+      method: "DELETE",
+    }).then((res) => {
+      if (!res.ok) throw new Error("Failed to delete");
+      setDocuments((prev) => prev.filter((doc) => doc.document_id !== docId));
+      return res;
+    });
 
-      if (res.ok) {
-        // Remove from local state
-        setDocuments((prev) => prev.filter((doc) => doc.document_id !== docId));
-      } else {
-        alert("Failed to delete document. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error deleting document:", error);
-      alert("An error occurred while deleting the document.");
-    }
+    toast.promise(deletePromise, {
+      loading: "Deleting document...",
+      success: "Document deleted successfully",
+      error: "Failed to delete document",
+    });
+
+    setDocumentToDelete(null);
   };
 
   if (loading) {
@@ -214,6 +220,17 @@ export default function DocumentList() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete Document"
+        message="Are you sure you want to delete this document? This will permanently remove all slides, questions, and summary data. This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

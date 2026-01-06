@@ -66,6 +66,7 @@ class DocumentCreateResponse(BaseModel):
     """
     document_id: int
     status: str
+    status_message: Optional[str] = None
     filename: str
     created_at: datetime
 
@@ -143,6 +144,7 @@ class DocumentDetailResponse(BaseModel):
     storage_path: str
     checksum: str
     status: str
+    status_message: Optional[str] = None
     created_at: datetime
     raw_markdown: Optional[str] = None
     pages: List[PageResponse] = []

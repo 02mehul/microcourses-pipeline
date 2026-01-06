@@ -23,6 +23,7 @@ class Document(Base):
     storage_path = Column(String, nullable=False)
     checksum = Column(String, nullable=True, index=True)
     status = Column(String, nullable=False, default="PENDING")  # PENDING/RUNNING/...
+    status_message = Column(String, nullable=True)  # Progress message: "Extracting content...", etc.
     created_at = Column(DateTime, default=datetime.utcnow)
     raw_markdown = Column(Text, nullable=True)  # Parsed markdown from LlamaParse
 
