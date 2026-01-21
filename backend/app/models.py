@@ -96,6 +96,9 @@ class Slide(Base):
     table_data = Column(JSON, nullable=True)  # {headers: [], rows: [[]], caption: ""}
     has_table = Column(Boolean, default=False)  # Quick flag for frontend layout decisions
 
+    # AI-driven visualization support (charts or tables)
+    visualization_data = Column(JSON, nullable=True)  # {type: "chart|table", chart_type: "line|bar|pie", data: [], title: ""}
+
     document = relationship("Document", back_populates="slides")
     questions = relationship("Question", back_populates="slide", cascade="all, delete-orphan")
 

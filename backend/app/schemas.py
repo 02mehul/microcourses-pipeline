@@ -103,6 +103,7 @@ class SlideResponse(BaseModel):
     subchapter_id: Optional[str] = None
     table_data: Optional[Dict[str, Any]] = None
     has_table: Optional[bool] = False
+    visualization_data: Optional[Dict[str, Any]] = None  # AI-driven chart or table visualization
     questions: List[QuestionResponse] = []
 
     class Config:

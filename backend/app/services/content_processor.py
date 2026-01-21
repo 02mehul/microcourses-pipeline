@@ -324,26 +324,107 @@ INSTRUCTIONS:
 1. Read through ALL the content carefully
 2. Create UP TO 8 slides maximum (aim for 6-8 slides for comprehensive coverage)
 3. Create slides that cover the key topics, concepts, and insights
-4. For EACH slide, decide if including a small table would enhance understanding
-5. Only include a table if:
-   - It contains important data/statistics referenced in the bullet points
-   - It's small and focused (max 5 columns, 5-7 rows)
-   - It provides visual clarity that text alone cannot
-6. Tables should be COMPLEMENTARY to bullet points, not redundant
+4. For EACH slide, analyze if the content contains data that would benefit from visualization
 
-SLIDE LAYOUT DESIGN:
+VISUALIZATION DECISION FRAMEWORK:
+For each slide, decide the BEST way to present data (if any):
+
+**Line Chart** - Use when:
+- Showing trends over time (years, quarters, months)
+- Continuous progression or growth patterns
+- Comparing multiple trend lines
+- Example: GDP growth 2015-2025, temperature changes, stock prices
+
+**Bar Chart** - Use when:
+- Comparing quantities across distinct categories
+- Ranking items by value
+- Side-by-side group comparisons
+- Example: Sales by region, survey results by demographic
+
+**Pie Chart** - Use when:
+- Showing proportions or percentages that sum to 100%
+- Part-to-whole relationships (3-6 segments max for clarity)
+- Market share, budget allocation
+- Example: Budget breakdown by department, market share distribution
+
+**Table** - Use when:
+- Multi-attribute comparisons (feature matrices)
+- Precise lookup data needed
+- Data doesn't fit time/category/proportion patterns
+- Example: Product feature comparison, specification sheet
+
+**No Visualization** - Use when:
+- Content is conceptual (theories, definitions, frameworks)
+- Narrative or qualitative insights
+- No numeric data present
+
+RULES:
+- Maximum 1 visualization per slide
+- Keep visualizations simple (5-8 data points ideal, max 10)
+- Only visualize data explicitly stated in the document
+- Do NOT invent or extrapolate data
+- Visualizations should COMPLEMENT bullet points, not duplicate them
+
+SLIDE LAYOUT:
 - Left side: 3-4 bullet points (key insights)
-- Right side: Optional small table (supporting data)
+- Right side: Optional visualization (chart or table)
 
 Return ONLY a JSON object with a "slides" key containing an array of slide objects.
 Each slide object must have:
-- title: A clear, concise title
-- subheading: A brief subheading or context
-- summary: A bulleted list of 3-4 key points (as an array of strings)
-- table: (OPTIONAL) Object with:
-  - headers: Array of column headers (max 5)
-  - rows: Array of row arrays (max 7 rows)
-  - caption: Brief description of what the table shows
+- title: Clear, concise title
+- subheading: Brief context or subtitle
+- summary: Array of 3-4 key points (strings)
+- visualization: (OPTIONAL) Object with one of these formats:
+
+LINE CHART FORMAT:
+{{
+  "type": "chart",
+  "chart_type": "line",
+  "data": [
+    {{"name": "2015", "value": 100}},
+    {{"name": "2016", "value": 120}},
+    {{"name": "2017", "value": 135}}
+  ],
+  "title": "GDP Growth Over Time"
+}}
+
+BAR CHART FORMAT:
+{{
+  "type": "chart",
+  "chart_type": "bar",
+  "data": [
+    {{"name": "Product A", "value": 450}},
+    {{"name": "Product B", "value": 380}},
+    {{"name": "Product C", "value": 320}}
+  ],
+  "title": "Sales by Product"
+}}
+
+PIE CHART FORMAT:
+{{
+  "type": "chart",
+  "chart_type": "pie",
+  "data": [
+    {{"name": "Marketing", "value": 35}},
+    {{"name": "R&D", "value": 25}},
+    {{"name": "Operations", "value": 40}}
+  ],
+  "title": "Budget Allocation (%)"
+}}
+
+TABLE FORMAT:
+{{
+  "type": "table",
+  "data": {{
+    "headers": ["Feature", "Plan A", "Plan B"],
+    "rows": [
+      ["Storage", "10GB", "50GB"],
+      ["Users", "5", "Unlimited"],
+      ["Support", "Email", "24/7 Phone"]
+    ]
+  }},
+  "title": "Plan Comparison"
+}}
 
 EXAMPLE OUTPUT:
 {{
@@ -352,17 +433,19 @@ EXAMPLE OUTPUT:
       "title": "Productivity Trends",
       "subheading": "Regional Convergence Analysis",
       "summary": [
-        "Rural regions show significant convergence",
-        "Urban productivity gaps persist",
-        "Metropolitan areas maintain advantage"
+        "Rural regions show 24% convergence since 2004",
+        "Urban productivity gaps narrowed to 4%",
+        "Metropolitan areas maintain consistent advantage"
       ],
-      "table": {{
-        "headers": ["Year", "Rural", "Urban"],
-        "rows": [
-          ["2004", "65%", "85%"],
-          ["2024", "89%", "93%"]
+      "visualization": {{
+        "type": "chart",
+        "chart_type": "line",
+        "data": [
+          {{"name": "2004", "value": 65}},
+          {{"name": "2014", "value": 78}},
+          {{"name": "2024", "value": 89}}
         ],
-        "caption": "Eastern Germany productivity (% of national avg)"
+        "title": "Rural Productivity (% of national average)"
       }}
     }}
   ]
@@ -400,23 +483,42 @@ JSON Output:"""
                 else:
                     summary_text = str(summary)
 
-                # Process table data if present
-                table_data = slide.get("table")
-                has_table = table_data is not None and isinstance(table_data, dict)
+                # Process visualization data (new format: charts or tables)
+                visualization = slide.get("visualization")
+                visualization_data = None
+                has_table = False
+                table_data = None
 
-                # Validate table structure
-                if has_table:
-                    if not table_data.get("headers") or not table_data.get("rows"):
-                        logger.warning(f"Invalid table structure in slide '{slide.get('title')}', skipping table")
-                        has_table = False
-                        table_data = None
+                if visualization and isinstance(visualization, dict):
+                    viz_type = visualization.get("type")
+
+                    if viz_type == "chart":
+                        # Validate chart structure
+                        if visualization.get("chart_type") in ["line", "bar", "pie"] and visualization.get("data"):
+                            visualization_data = visualization
+                            logger.info(f"Slide '{slide.get('title')}': Using {visualization.get('chart_type')} chart")
+                        else:
+                            logger.warning(f"Invalid chart structure in slide '{slide.get('title')}', skipping visualization")
+
+                    elif viz_type == "table":
+                        # Validate table structure
+                        table_info = visualization.get("data", {})
+                        if table_info.get("headers") and table_info.get("rows"):
+                            visualization_data = visualization
+                            # Backward compatibility: populate old table fields
+                            has_table = True
+                            table_data = table_info
+                            logger.info(f"Slide '{slide.get('title')}': Using table")
+                        else:
+                            logger.warning(f"Invalid table structure in slide '{slide.get('title')}', skipping visualization")
 
                 normalized_slides.append({
                     "title": slide.get("title", "Untitled Slide"),
                     "subheading": slide.get("subheading", ""),
                     "summary": summary_text,
-                    "table_data": table_data,
-                    "has_table": has_table
+                    "visualization_data": visualization_data,
+                    "table_data": table_data,  # Backward compatibility
+                    "has_table": has_table      # Backward compatibility
                 })
             
             logger.info(f"Successfully generated {len(normalized_slides)} slides in single batch call")

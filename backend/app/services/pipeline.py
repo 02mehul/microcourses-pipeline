@@ -165,6 +165,7 @@ def process_document(document_id: int) -> None:
                         chapter_title="",  # Optional: Can be enhanced later
                         subchapter_title="",
                         subchapter_id=f"slide_{i+1}",
+                        visualization_data=slide_data.get("visualization_data"),
                         table_data=slide_data.get("table_data"),
                         has_table=slide_data.get("has_table", False)
                     )
@@ -172,9 +173,18 @@ def process_document(document_id: int) -> None:
                     db.flush()  # Get ID
                     db_slides.append(db_slide)
 
-                    # Log with table info
-                    table_info = " (with table)" if slide_data.get("has_table") else ""
-                    logger.info(f"Saved slide {i+1}: {slide_data.get('title')}{table_info}")
+                    # Log with visualization info
+                    viz_data = slide_data.get("visualization_data")
+                    if viz_data:
+                        if viz_data.get("type") == "chart":
+                            viz_info = f" (with {viz_data.get('chart_type')} chart)"
+                        elif viz_data.get("type") == "table":
+                            viz_info = " (with table)"
+                        else:
+                            viz_info = " (with visualization)"
+                    else:
+                        viz_info = ""
+                    logger.info(f"Saved slide {i+1}: {slide_data.get('title')}{viz_info}")
 
                 # Generate Questions for EACH subchapter (Milestone 3: 3-4 questions per subchapter)
                 logger.info("❓ Generating review questions per subchapter...")

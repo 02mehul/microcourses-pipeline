@@ -2,11 +2,19 @@ import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Save, Edit2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChartRenderer } from "./ChartRenderer";
 
 interface TableData {
   headers: string[];
   rows: string[][];
   caption?: string;
+}
+
+interface VisualizationData {
+  type: 'chart' | 'table';
+  chart_type?: 'line' | 'bar' | 'pie';
+  data: any;
+  title?: string;
 }
 
 interface Slide {
@@ -21,6 +29,7 @@ interface Slide {
   subchapter_id?: string;
   table_data?: TableData | null;
   has_table?: boolean;
+  visualization_data?: VisualizationData | null;
 }
 
 interface SlideEditorProps {
@@ -195,14 +204,14 @@ export default function SlideEditor({ slides, onSaveSlide }: SlideEditorProps) {
             )}
           </div>
 
-          {/* Content: Key Points + Optional Table */}
-          <div className={`grid gap-5 ${currentSlide.has_table && currentSlide.table_data ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
+          {/* Content: Key Points + Optional Visualization (Chart or Table) */}
+          <div className={`grid gap-5 ${currentSlide.visualization_data ? 'lg:grid-cols-2' : 'grid-cols-1'}`}>
             {/* Key Points */}
             <div>
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 Key Points
               </h4>
-              
+
               {isEditing ? (
                 <div className="space-y-2">
                   <label className="block text-xs text-gray-400">Edit content (Markdown supported)</label>
@@ -227,47 +236,54 @@ export default function SlideEditor({ slides, onSaveSlide }: SlideEditorProps) {
               )}
             </div>
 
-            {/* Table (if present) - Read Only for now */}
-            {currentSlide.has_table && currentSlide.table_data && (
+            {/* Visualization: Chart or Table (if present) */}
+            {currentSlide.visualization_data && (
               <div>
-                {currentSlide.table_data.caption && (
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    {currentSlide.table_data.caption}
-                  </h4>
-                )}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg text-sm">
-                    <thead className="bg-indigo-50">
-                      <tr>
-                        {currentSlide.table_data.headers.map((header, idx) => (
-                          <th
-                            key={idx}
-                            className="px-3 py-2 text-left text-xs font-semibold text-indigo-900 uppercase tracking-wider"
-                          >
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {currentSlide.table_data.rows.map((row, rowIdx) => (
-                        <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          {row.map((cell, cellIdx) => (
-                            <td
-                              key={cellIdx}
-                              className="px-3 py-2 text-xs text-gray-700"
-                            >
-                              {cell}
-                            </td>
+                {currentSlide.visualization_data.type === 'chart' && currentSlide.visualization_data.chart_type ? (
+                  <ChartRenderer
+                    data={currentSlide.visualization_data.data}
+                    type={currentSlide.visualization_data.chart_type}
+                    title={currentSlide.visualization_data.title}
+                  />
+                ) : currentSlide.visualization_data.type === 'table' ? (
+                  <div>
+                    {currentSlide.visualization_data.title && (
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        {currentSlide.visualization_data.title}
+                      </h4>
+                    )}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg text-sm">
+                        <thead className="bg-indigo-50">
+                          <tr>
+                            {currentSlide.visualization_data.data.headers?.map((header: string, idx: number) => (
+                              <th
+                                key={idx}
+                                className="px-3 py-2 text-left text-xs font-semibold text-indigo-900 uppercase tracking-wider"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {currentSlide.visualization_data.data.rows?.map((row: string[], rowIdx: number) => (
+                            <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              {row.map((cell: string, cellIdx: number) => (
+                                <td
+                                  key={cellIdx}
+                                  className="px-3 py-2 text-xs text-gray-700"
+                                >
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
                           ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-2 text-xs text-gray-400 italic text-center">
-                  Table editing not supported yet
-                </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
