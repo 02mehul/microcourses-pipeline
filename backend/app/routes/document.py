@@ -48,17 +48,6 @@ def list_documents(
     status: Optional[str] = Query(None, description="Filter by status (PENDING, RUNNING, SUCCESS, FAILED)"),
     db: Session = Depends(get_db),
 ):
-    """
-    List all documents with optional filtering and pagination.
-
-    Query Parameters:
-    - skip: Offset for pagination (default: 0)
-    - limit: Maximum results to return (default: 20, max: 100)
-    - status: Filter by document status (optional)
-
-    Returns:
-        List of documents with basic metadata
-    """
     query = db.query(models.Document)
 
     if status:
@@ -99,7 +88,6 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="Empty file")
 
     checksum = hashlib.md5(data).hexdigest()
-    # Store with correct extension
     key = f"documents/{checksum}_{file.filename}"
 
     storage.upload_fileobj(io.BytesIO(data), key)
@@ -114,10 +102,8 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
 
-    # Run pipeline in background
     background_tasks.add_task(process_document, doc.id)
 
-    # Refresh to get updated status and created_at
     db.refresh(doc)
 
     return schemas.DocumentCreateResponse(
@@ -148,7 +134,6 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{document_id}/summary", response_model=schemas.DocumentSummaryResponse)
 def get_document_summary(document_id: int, db: Session = Depends(get_db)):
-    """Get the generated summary for a document."""
     summary = db.query(models.DocumentSummary).filter(
         models.DocumentSummary.document_id == document_id
     ).first()
@@ -163,19 +148,16 @@ def regenerate_summary(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Regenerate the summary for a document."""
     doc = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # Import here to avoid circular imports
     from ..services.summary_generator import SummaryGenerator
     from ..models import DocumentSummary, Block, Page
     
     def generate_summary_task(doc_id: int):
         from ..db import SessionLocal
         with SessionLocal() as task_db:
-            # Get all blocks for the document
             pages = task_db.query(Page).filter(Page.document_id == doc_id).all()
             all_blocks = []
             for page in pages:
@@ -188,7 +170,6 @@ def regenerate_summary(
                 generator = SummaryGenerator()
                 summary_data = generator.create_full_summary(all_blocks, len(pages))
                 
-                # Delete existing and create new
                 task_db.query(DocumentSummary).filter(
                     DocumentSummary.document_id == doc_id
                 ).delete()
@@ -214,7 +195,6 @@ def regenerate_summary(
 
 @router.get("/{document_id}/raw")
 def get_raw_markdown(document_id: int, db: Session = Depends(get_db)):
-    """Get the raw parsed markdown for editing."""
     doc = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -228,16 +208,13 @@ def update_raw_markdown(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Update raw markdown and retrigger full processing pipeline."""
     doc = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # Set status to RUNNING immediately
     doc.status = "RUNNING"
     db.commit()
     
-    # Run reprocessing in background
     background_tasks.add_task(reprocess_document_from_markdown, document_id, body.raw_markdown)
     
     return {"message": "Reprocessing started", "status": "RUNNING"}
@@ -279,14 +256,10 @@ def chat_document(
     chat_request: schemas.ChatRequest,
     db: Session = Depends(get_db)
 ):
-    # Get document
     doc = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Get all text blocks for context
-    # We join all text blocks to create the context
-    # Optimization: In a real app, we might use RAG (embeddings) here for large docs
     pages = db.query(models.Page).filter(models.Page.document_id == document_id).all()
     all_text = []
     for p in pages:
@@ -317,24 +290,16 @@ def chat_document(
 
 @router.delete("/{document_id}")
 def delete_document(document_id: int, db: Session = Depends(get_db)):
-    """
-    Delete a document and all related data (pages, blocks, slides, questions, summary).
-
-    The cascade delete is handled by SQLAlchemy relationships defined in models.py.
-    """
     doc = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Delete from MinIO storage
     try:
         storage.delete_file(doc.storage_path)
     except Exception as e:
-        # Log but don't fail if storage deletion fails
         import logging
         logging.warning(f"Failed to delete file from storage: {e}")
 
-    # Delete from database (cascades to all related tables)
     db.delete(doc)
     db.commit()
 

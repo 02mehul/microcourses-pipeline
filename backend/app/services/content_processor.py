@@ -12,24 +12,13 @@ logger = logging.getLogger(__name__)
 
 class ContentProcessor:
     def __init__(self, api_key: Optional[str] = None):
-        """
-        Initialize ContentProcessor with Gemini API.
-
-        Args:
-            api_key: Gemini API key. If not provided, reads from GEMINI_API_KEY env var.
-        """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY must be set in environment or passed to constructor")
 
-        # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)
 
     def filter_content(self, text: str) -> str:
-        """
-        Filter out irrelevant content like legal notices, editorial details, etc.
-        """
-        # Patterns to remove
         patterns = [
             r"© DIW Berlin \d{4}",
             r"DIW Weekly Report \d+\+\d+/\d+",
@@ -52,34 +41,27 @@ class ContentProcessor:
         for pattern in patterns:
             filtered_text = re.sub(pattern, "", filtered_text, flags=re.IGNORECASE | re.MULTILINE)
 
-        # Remove multiple newlines
         filtered_text = re.sub(r"\n{3,}", "\n\n", filtered_text)
         return filtered_text.strip()
 
     def detect_subchapters(self, blocks: List[Block]) -> List[Dict[str, Any]]:
-        """
-        Detect chapter and subchapter boundaries from blocks.
-        Returns list of subchapter dictionaries with metadata and content blocks.
-        """
         subchapters = []
         current_chapter = None
         current_subchapter = None
         current_blocks = []
 
-        # Patterns that indicate section/subchapter boundaries in LlamaParse output
         section_patterns = [
-            r'^Figure \d+',              # "Figure 1 — Title"
-            r'^Chart \d+',               # "Chart 1 — Title"
-            r'^Table \d+',               # "Table 1 — Title"
-            r'^Section:',                # "Section: Title"
-            r'^Document section:',       # "Document section: Title"
-            r'^Box —',                   # "Box — Title"
-            r'^\d+\.\s+[A-Z]',           # "1. Title" numbered sections
+            r'^Figure \d+',
+            r'^Chart \d+',
+            r'^Table \d+',
+            r'^Section:',
+            r'^Document section:',
+            r'^Box —',
+            r'^\d+\.\s+[A-Z]',
         ]
         section_regex = re.compile('|'.join(section_patterns), re.IGNORECASE)
 
         for block in blocks:
-            # Skip non-text blocks for hierarchy detection
             if not block.text_raw or not block.semantic_role:
                 current_blocks.append(block)
                 continue
@@ -87,26 +69,20 @@ class ContentProcessor:
             role = block.semantic_role
             text = block.text_raw.strip()
 
-            # Detect chapter heading (H1 or title)
             if role in ["title", "chapter_heading"] or block.hierarchy_level == 0:
-                # Save previous subchapter if exists
                 if current_subchapter and current_blocks:
                     current_subchapter["blocks"] = current_blocks
                     subchapters.append(current_subchapter)
                     current_blocks = []
 
-                # New chapter
                 current_chapter = text
                 current_subchapter = None
 
-            # Detect subchapter/section heading (H2, H3) OR pattern-based detection
             elif role == "section_heading" or (block.hierarchy_level and block.hierarchy_level >= 1):
-                # Save previous subchapter if exists
                 if current_subchapter and current_blocks:
                     current_subchapter["blocks"] = current_blocks
                     subchapters.append(current_subchapter)
 
-                # New subchapter
                 subchapter_id = f"ch{len(subchapters) + 1}"
                 current_subchapter = {
                     "id": subchapter_id,
@@ -116,16 +92,12 @@ class ContentProcessor:
                 }
                 current_blocks = [block]
 
-            # Pattern-based section detection for LlamaParse output without markdown headings
             elif section_regex.match(text):
-                # Save previous subchapter if exists
                 if current_subchapter and current_blocks:
                     current_subchapter["blocks"] = current_blocks
                     subchapters.append(current_subchapter)
 
-                # New subchapter from pattern match
                 subchapter_id = f"ch{len(subchapters) + 1}"
-                # Extract clean title (first 80 chars, trim at sentence end if possible)
                 title = text[:80].split('\n')[0]
                 current_subchapter = {
                     "id": subchapter_id,
@@ -136,15 +108,12 @@ class ContentProcessor:
                 current_blocks = [block]
 
             else:
-                # Regular content block
                 current_blocks.append(block)
 
-        # Save final subchapter
         if current_subchapter and current_blocks:
             current_subchapter["blocks"] = current_blocks
             subchapters.append(current_subchapter)
         elif current_blocks:
-            # No subchapters detected, create a default one
             subchapters.append({
                 "id": "ch1",
                 "chapter_title": current_chapter or "Document Content",
@@ -152,12 +121,10 @@ class ContentProcessor:
                 "blocks": current_blocks
             })
 
-        # Limit to max 8 subchapters (updated for more comprehensive coverage)
         MAX_SUBCHAPTERS = 8
         if len(subchapters) > MAX_SUBCHAPTERS:
             logger.info(f"Detected {len(subchapters)} subchapters, merging to max {MAX_SUBCHAPTERS}...")
             
-            # Calculate chunk size to distribute evenly
             import math
             chunk_size = math.ceil(len(subchapters) / MAX_SUBCHAPTERS)
             
@@ -167,16 +134,13 @@ class ContentProcessor:
                 if not chunk:
                     continue
                 
-                # Use the title of the first subchapter in the chunk
                 base = chunk[0]
                 merged_blocks = []
                 for sc in chunk:
                     merged_blocks.extend(sc["blocks"])
                 
-                # Update title to indicate range if multiple merged
                 if len(chunk) > 1:
                     new_title = f"{base['subchapter_title']} - {chunk[-1]['subchapter_title']}"
-                    # Truncate if too long
                     if len(new_title) > 100:
                         new_title = f"{base['subchapter_title']} et al."
                 else:
@@ -195,28 +159,20 @@ class ContentProcessor:
         return subchapters
 
     def chunk_subchapter_into_slides(self, subchapter: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Chunk a single subchapter into multiple slides if needed.
-        Strategy: Create slides of reasonable size, considering graphics/tables.
-        """
         blocks = subchapter["blocks"]
         if not blocks:
             return []
 
-        # Calculate content length and complexity
         total_text = "\n".join([b.text_raw for b in blocks if b.text_raw])
         has_tables = any(b.type == "table" for b in blocks)
         has_figures = any(b.type == "figure" for b in blocks)
 
-        # Adjust chunk size based on content
-        BASE_CHUNK_SIZE = 1500  # characters
+        BASE_CHUNK_SIZE = 1500
         if has_tables or has_figures:
-            # Smaller chunks for content with graphics
             chunk_size = 1000
         else:
             chunk_size = BASE_CHUNK_SIZE
 
-        # If subchapter is small enough, return as single slide
         if len(total_text) <= chunk_size:
             return [{
                 "chapter_title": subchapter["chapter_title"],
@@ -225,7 +181,6 @@ class ContentProcessor:
                 "content": total_text
             }]
 
-        # Split into multiple slides
         slides = []
         current_chunk = []
         current_length = 0
@@ -237,12 +192,10 @@ class ContentProcessor:
             block_text = block.text_raw
             block_length = len(block_text)
 
-            # Add block to current chunk
             if current_length + block_length <= chunk_size or not current_chunk:
                 current_chunk.append(block_text)
                 current_length += block_length
             else:
-                # Save current chunk and start new one
                 slides.append({
                     "chapter_title": subchapter["chapter_title"],
                     "subchapter_title": subchapter["subchapter_title"],
@@ -252,7 +205,6 @@ class ContentProcessor:
                 current_chunk = [block_text]
                 current_length = block_length
 
-        # Save final chunk
         if current_chunk:
             slides.append({
                 "chapter_title": subchapter["chapter_title"],
@@ -265,16 +217,10 @@ class ContentProcessor:
         return slides
 
     def chunk_content(self, blocks: List[Block]) -> List[Dict[str, Any]]:
-        """
-        Hierarchical chunking: Detect subchapters and create slides respecting structure.
-        Returns list of slide dictionaries with chapter/subchapter metadata.
-        """
-        # Detect subchapter boundaries
         subchapters = self.detect_subchapters(blocks)
 
         if not subchapters:
             logger.warning("No subchapters detected, using fallback chunking")
-            # Fallback to simple text chunking
             all_text = "\n".join([b.text_raw for b in blocks if b.text_raw])
             return [{
                 "chapter_title": "Document",
@@ -283,7 +229,6 @@ class ContentProcessor:
                 "content": all_text
             }]
 
-        # Chunk each subchapter into slides
         all_slides = []
         for subchapter in subchapters:
             slides = self.chunk_subchapter_into_slides(subchapter)
@@ -293,17 +238,6 @@ class ContentProcessor:
         return all_slides
 
     def generate_all_slides_batch(self, blocks: List[Block]) -> List[Dict[str, Any]]:
-        """
-        Generate ALL slides in a single API call by passing the entire document content.
-        The AI will determine the optimal number of slides (typically 5-10).
-        
-        Args:
-            blocks: List of Block objects containing the document content
-            
-        Returns:
-            List of slide dictionaries, each with title, subheading, and summary
-        """
-        # Combine all text blocks into single content string, including table data
         full_content = "\n\n".join([
             f"[{block.semantic_role or block.type}] {block.text_raw}" +
             (f"\n[TABLE_DATA] {json.dumps(block.table_data)}" if block.table_data else "")
@@ -311,7 +245,6 @@ class ContentProcessor:
             if block.text_raw
         ])
         
-        # Filter content
         full_content = self.filter_content(full_content)
         
         if not full_content:
@@ -471,11 +404,9 @@ JSON Output:"""
             result = json.loads(response.text)
             slides = result.get("slides", [])
             
-            # Validate and normalize slide format
             normalized_slides = []
             for slide in slides:
                 summary = slide.get("summary", [])
-                # Ensure summary is formatted as bullet list
                 if isinstance(summary, list):
                     summary_text = "\n".join(f"- {item}" for item in summary if item)
                 elif isinstance(summary, str):
@@ -483,7 +414,6 @@ JSON Output:"""
                 else:
                     summary_text = str(summary)
 
-                # Process visualization data (new format: charts or tables)
                 visualization = slide.get("visualization")
                 visualization_data = None
                 has_table = False
@@ -493,7 +423,6 @@ JSON Output:"""
                     viz_type = visualization.get("type")
 
                     if viz_type == "chart":
-                        # Validate chart structure
                         if visualization.get("chart_type") in ["line", "bar", "pie"] and visualization.get("data"):
                             visualization_data = visualization
                             logger.info(f"Slide '{slide.get('title')}': Using {visualization.get('chart_type')} chart")
@@ -501,11 +430,9 @@ JSON Output:"""
                             logger.warning(f"Invalid chart structure in slide '{slide.get('title')}', skipping visualization")
 
                     elif viz_type == "table":
-                        # Validate table structure
                         table_info = visualization.get("data", {})
                         if table_info.get("headers") and table_info.get("rows"):
                             visualization_data = visualization
-                            # Backward compatibility: populate old table fields
                             has_table = True
                             table_data = table_info
                             logger.info(f"Slide '{slide.get('title')}': Using table")
@@ -517,8 +444,8 @@ JSON Output:"""
                     "subheading": slide.get("subheading", ""),
                     "summary": summary_text,
                     "visualization_data": visualization_data,
-                    "table_data": table_data,  # Backward compatibility
-                    "has_table": has_table      # Backward compatibility
+                    "table_data": table_data,
+                    "has_table": has_table
                 })
             
             logger.info(f"Successfully generated {len(normalized_slides)} slides in single batch call")
@@ -533,10 +460,6 @@ JSON Output:"""
             return []
 
     def generate_slides_for_subchapter(self, blocks: List[Block], subchapter_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Generate slides for a specific subchapter.
-        """
-        # Combine text blocks
         full_content = "\n\n".join([
             f"[{block.semantic_role or block.type}] {block.text_raw}" +
             (f"\n[TABLE_DATA] {json.dumps(block.table_data)}" if block.table_data else "")
@@ -573,7 +496,6 @@ CONTENT:
 JSON Output:"""
 
         try:
-            # Add delay to avoid rate limits
             time.sleep(1)
             
             response = self.client.models.generate_content(
@@ -588,9 +510,7 @@ JSON Output:"""
             result = json.loads(response.text)
             slides = result.get("slides", [])
             
-            # Normalize slides
             normalized_slides = []
-            # Hard limit to 3 slides per subchapter
             for slide in slides[:3]:
                 summary = slide.get("summary", [])
                 if isinstance(summary, list):
@@ -625,16 +545,60 @@ JSON Output:"""
 
 
     def generate_questions_for_subchapter(self, subchapter_content: str) -> List[Dict[str, str]]:
-        """
-        Generate 3-4 review questions for an entire subchapter (Milestone 3 requirement).
-        """
-        prompt = f"""You are an expert educational content creator. Create 4-5 comprehensive review questions for this subchapter.
+        prompt = f"""You are an expert educational content creator. Create 4-5 comprehensive review questions for this subchapter using MULTIPLE question formats.
 
-These questions should test understanding of the ENTIRE subchapter content, not just individual slides.
+QUESTION TYPE GUIDELINES:
+
+1. **Short Answer** - Use for factual, specific information:
+   - Dates, names, single terms, numbers
+   - Example: "What year did the Berlin Wall fall?" → Answer: "1989"
+
+2. **Sentence** - Use for explanations and concepts:
+   - "Why", "How", "Explain" questions
+   - Example: "Explain the main factor..." → Answer: Full sentence explanation
+
+3. **Multiple Choice** - Use for testing understanding between options:
+   - Comparing concepts, identifying best practices
+   - 4 options (A, B, C, D), one correct
+   - Example: "Which region showed the highest growth?"
+
+DISTRIBUTION:
+- Create a MIX of all three types (not all the same type)
+- Aim for: 1-2 short_answer, 2-3 sentence, 1-2 multiple_choice
 
 Return ONLY a JSON object with a key "questions" containing a list of objects, each with:
-- question_text: A clear, comprehensive question
-- answer_text: A detailed correct answer
+- question_text: The question
+- question_type: "short_answer" | "sentence" | "multiple_choice"
+- answer_text: The correct answer (for short_answer and sentence types)
+- options: Array of 4 option strings (ONLY for multiple_choice, omit for others)
+- correct_answer: The correct option letter "A", "B", "C", or "D" (ONLY for multiple_choice)
+
+EXAMPLE OUTPUT:
+{{
+  "questions": [
+    {{
+      "question_text": "What percentage of growth was observed in the rural sector?",
+      "question_type": "short_answer",
+      "answer_text": "24%"
+    }},
+    {{
+      "question_text": "Explain why the urban-rural productivity gap narrowed between 2004-2024.",
+      "question_type": "sentence",
+      "answer_text": "The gap narrowed due to targeted infrastructure investments and education programs in rural areas, which increased productivity."
+    }},
+    {{
+      "question_text": "Which region maintained the highest productivity throughout the study period?",
+      "question_type": "multiple_choice",
+      "options": [
+        "Rural eastern regions",
+        "Metropolitan areas",
+        "Mid-sized cities",
+        "Coastal towns"
+      ],
+      "correct_answer": "B"
+    }}
+  ]
+}}
 
 Subchapter Content:
 {subchapter_content[:3000]}
@@ -642,7 +606,6 @@ Subchapter Content:
 JSON Output:"""
 
         try:
-            # Add delay to avoid rate limits
             time.sleep(1)
 
             response = self.client.models.generate_content(
@@ -668,9 +631,6 @@ JSON Output:"""
             return []
 
     def generate_questions(self, chunk: str) -> List[Dict[str, str]]:
-        """
-        Generate review questions using Gemini API (legacy method for single chunks).
-        """
         prompt = f"""You are an expert educational content creator. Create 3 review questions based on the following text.
 
 Return ONLY a JSON object with a key "questions" containing a list of objects, each with:
@@ -683,11 +643,10 @@ Text:
 JSON Output:"""
 
         try:
-            # Add small delay to avoid rate limits
             time.sleep(1)
 
             response = self.client.models.generate_content(
-                model="gemini-2.5-pro",  # More stable with better rate limits
+                model="gemini-2.5-pro",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -709,23 +668,18 @@ JSON Output:"""
             return []
 
     def chat_with_document(self, document_text: str, message: str, history: List[Dict[str, str]]) -> str:
-        """
-        Chat with the document content using Gemini.
-        """
         try:
-            # Construct chat history for Gemini
             chat_history = []
             for msg in history:
                 role = "user" if msg["role"] == "user" else "model"
                 chat_history.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
 
-            # System prompt with context
             system_instruction = f"""You are a helpful and knowledgeable Teaching Assistant for a micro-course.
             
             CONTEXT:
             The user is studying the following document:
             
-            {document_text[:30000]}  # Limit context to avoid token limits
+            {document_text[:30000]}
             
             INSTRUCTIONS:
             1. Answer the user's questions based PRIMARILY on the provided document content.
@@ -755,7 +709,6 @@ JSON Output:"""
                - Always provide a text summary/analysis along with the chart.
             """
 
-            # Create chat session
             chat = self.client.chats.create(
                 model="gemini-2.5-pro",
                 history=chat_history,

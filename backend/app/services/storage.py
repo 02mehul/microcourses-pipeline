@@ -32,7 +32,6 @@ def download_bytes(key: str) -> bytes:
 
 
 def delete_file(key: str) -> None:
-    """Delete a file from MinIO storage."""
     try:
         s3.delete_object(Bucket=settings.MINIO_BUCKET, Key=key)
     except ClientError as e:

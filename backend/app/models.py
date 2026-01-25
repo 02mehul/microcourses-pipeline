@@ -22,10 +22,10 @@ class Document(Base):
     filename = Column(String, nullable=False)
     storage_path = Column(String, nullable=False)
     checksum = Column(String, nullable=True, index=True)
-    status = Column(String, nullable=False, default="PENDING")  # PENDING/RUNNING/...
-    status_message = Column(String, nullable=True)  # Progress message: "Extracting content...", etc.
+    status = Column(String, nullable=False, default="PENDING")
+    status_message = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    raw_markdown = Column(Text, nullable=True)  # Parsed markdown from LlamaParse
+    raw_markdown = Column(Text, nullable=True)
 
     pages = relationship("Page", back_populates="document", cascade="all, delete-orphan")
 
@@ -48,23 +48,20 @@ class Block(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(Integer, ForeignKey("pages.id"), nullable=False)
-    type = Column(String, default="text")  # text/table/figure
-    bbox = Column(JSON, nullable=False)    # {x0,y0,x1,y1} normalized 0-1
+    type = Column(String, default="text")
+    bbox = Column(JSON, nullable=False)
     text_raw = Column(String, nullable=True)
     ocr_used = Column(Boolean, default=False)
 
     page = relationship("Page", back_populates="blocks")
     parent = relationship("Block", remote_side=[id], backref="children")
 
-    # Semantic classification
-    semantic_role = Column(String, nullable=True)  # title, chapter_heading, paragraph, etc.
-    hierarchy_level = Column(Integer, nullable=True)  # 0=chapter, 1=section, etc.
+    semantic_role = Column(String, nullable=True)
+    hierarchy_level = Column(Integer, nullable=True)
 
-    # Relationships
     parent_block_id = Column(Integer, ForeignKey("blocks.id"), nullable=True)
     sequence_order = Column(Integer, nullable=True)
 
-    # Rich content
     table_data = Column(JSON, nullable=True)
     table_headers = Column(JSON, nullable=True)
     image_path = Column(String, nullable=True)
@@ -72,7 +69,6 @@ class Block(Base):
 
     @property
     def page_number(self) -> int:
-        """Convenience property to get page number for API responses."""
         return self.page.page_number if self.page else 0
 
 
@@ -85,19 +81,16 @@ class Slide(Base):
     title = Column(String, nullable=True)
     subheading = Column(String, nullable=True)
     summary = Column(String, nullable=True)
-    content_chunk = Column(String, nullable=True)  # The raw text chunk used for this slide
+    content_chunk = Column(String, nullable=True)
 
-    # Hierarchical context (Milestone 3 requirement)
     chapter_title = Column(String, nullable=True)
     subchapter_title = Column(String, nullable=True)
-    subchapter_id = Column(String, nullable=True)  # Unique identifier for grouping
+    subchapter_id = Column(String, nullable=True)
 
-    # Table support for visual data presentation
-    table_data = Column(JSON, nullable=True)  # {headers: [], rows: [[]], caption: ""}
-    has_table = Column(Boolean, default=False)  # Quick flag for frontend layout decisions
+    table_data = Column(JSON, nullable=True)
+    has_table = Column(Boolean, default=False)
 
-    # AI-driven visualization support (charts or tables)
-    visualization_data = Column(JSON, nullable=True)  # {type: "chart|table", chart_type: "line|bar|pie", data: [], title: ""}
+    visualization_data = Column(JSON, nullable=True)
 
     document = relationship("Document", back_populates="slides")
     questions = relationship("Question", back_populates="slide", cascade="all, delete-orphan")
@@ -112,42 +105,39 @@ class Question(Base):
     question_text = Column(String, nullable=False)
     answer_text = Column(String, nullable=True)
 
-    # Subchapter grouping (Milestone 3: 3-4 questions per subchapter)
     subchapter_id = Column(String, nullable=True)
     subchapter_title = Column(String, nullable=True)
+
+    question_type = Column(String, nullable=True, default="sentence")
+    options = Column(JSON, nullable=True)
+    correct_answer = Column(String, nullable=True)
 
     document = relationship("Document", back_populates="questions")
     slide = relationship("Slide", back_populates="questions")
 
 
 class DocumentSummary(Base):
-    """Stores visual summary data for a document including stats, charts, and insights."""
     __tablename__ = "document_summaries"
 
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
 
-    # Executive Summary
     executive_summary = Column(Text, nullable=True)
 
-    # Statistics (stored as JSON for flexibility)
-    stats = Column(JSON, nullable=True)  # {word_count, reading_time_minutes, page_count, complexity_score, etc.}
+    stats = Column(JSON, nullable=True)
 
-    # Visual Data for Charts
-    key_concepts = Column(JSON, nullable=True)  # [{name, importance, frequency, category}]
-    topic_distribution = Column(JSON, nullable=True)  # [{section, topic, weight}]
+    key_concepts = Column(JSON, nullable=True)
+    topic_distribution = Column(JSON, nullable=True)
 
-    # Insights
-    main_takeaways = Column(JSON, nullable=True)  # ["takeaway1", "takeaway2", ...]
-    learning_objectives = Column(JSON, nullable=True)  # ["objective1", "objective2", ...]
+    main_takeaways = Column(JSON, nullable=True)
+    learning_objectives = Column(JSON, nullable=True)
 
-    # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     document = relationship("Document", back_populates="summary")
 
-# Update Document relationships
+
 Document.slides = relationship("Slide", back_populates="document", cascade="all, delete-orphan")
 Document.questions = relationship("Question", back_populates="document", cascade="all, delete-orphan")
 Document.summary = relationship("DocumentSummary", back_populates="document", uselist=False, cascade="all, delete-orphan")

@@ -83,6 +83,9 @@ class QuestionResponse(BaseModel):
     answer_text: Optional[str] = None
     subchapter_id: Optional[str] = None
     subchapter_title: Optional[str] = None
+    question_type: Optional[str] = "sentence"  # "short_answer" | "sentence" | "multiple_choice"
+    options: Optional[List[str]] = None  # For multiple_choice questions
+    correct_answer: Optional[str] = None  # For multiple_choice questions
 
     class Config:
         from_attributes = True

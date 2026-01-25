@@ -9,10 +9,6 @@ class MarkdownParser:
 
 
     def parse(self, markdown_text: str, page_num: int) -> List[Dict[str, Any]]:
-        """
-        Parse Markdown text for a specific page.
-        """
-        # Mistune returns an AST (Abstract Syntax Tree)
         ast = self.markdown(markdown_text)
         
         blocks = [] 
@@ -26,7 +22,6 @@ class MarkdownParser:
         return blocks
 
     def _process_node(self, node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Convert a Mistune AST node to our Block schema format."""
         node_type = node["type"]
         
         if node_type == "heading":
@@ -51,20 +46,15 @@ class MarkdownParser:
                 "semantic_role": role,
                 "hierarchy_level": hierarchy_level,
                 "text_raw": text,
-                "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0} # Placeholder, LlamaParse MD doesn't give bbox per line easily
+                "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0}
             }
 
         elif node_type == "paragraph":
             text = self._get_text_content(node)
 
-            # Check for images in paragraph
             if "![" in text and "](" in text:
-                # Basic check, mistune might have nested image node
-                # For now, treat as text, we might need deeper inspection for images
                 pass
 
-            # Detect figure captions/descriptions
-            # These are text describing charts/figures that LlamaParse converted to text
             text_lower = text.lower()
             is_figure_caption = (
                 text.startswith("Note:") or
@@ -74,12 +64,12 @@ class MarkdownParser:
                 "the figure shows" in text_lower or
                 "the graph shows" in text_lower or
                 "source:" in text_lower or
-                "© diw berlin" in text_lower  # Copyright notices on figures
+                "© diw berlin" in text_lower
             )
 
             if is_figure_caption:
                 return {
-                    "type": "figure",  # Type is figure, not text
+                    "type": "figure",
                     "semantic_role": "figure_caption",
                     "text_raw": text,
                     "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0}
@@ -93,13 +83,6 @@ class MarkdownParser:
             }
 
         elif node_type == "list":
-            # We could flatten lists or keep them as a block
-            # For now, let's extract all items as individual list_item blocks
-            # But here we return None and handle children? 
-            # Mistune AST is nested. 
-            # If we want to flatten, we need to return a list of blocks.
-            # Current structure assumes 1-to-1. 
-            # Let's just grab the text of the whole list for now to keep it simple.
             text = self._get_text_content(node)
             return {
                 "type": "text",
@@ -109,7 +92,6 @@ class MarkdownParser:
             }
             
         elif node_type == "table":
-            # Handle Markdown table
             table_data = self._parse_markdown_table(node)
             text_raw = self._reconstruct_markdown_table(table_data)
             return {
@@ -121,17 +103,13 @@ class MarkdownParser:
             }
         
         elif node_type == "image":
-            # Handle image nodes
-            # Extract alt text and URL
             children = node.get("children", [])
             alt_text = ""
             image_url = ""
 
             if children:
-                # Alt text is in children
                 alt_text = self._get_text_content(node)
 
-            # Try to get URL from node attributes
             if "attrs" in node and "url" in node["attrs"]:
                 image_url = node["attrs"]["url"]
             elif children and "raw" in children[0]:
@@ -140,8 +118,8 @@ class MarkdownParser:
             return {
                 "type": "figure",
                 "semantic_role": "figure",
-                "text_raw": alt_text,  # Alt text stored separately
-                "image_path": image_url,  # URL or path to image
+                "text_raw": alt_text,
+                "image_path": image_url,
                 "bbox": {"x0": 0, "y0": 0, "x1": 0, "y1": 0},
                 "metadata": {
                     "original_url": image_url,
@@ -150,12 +128,9 @@ class MarkdownParser:
             }
         
         elif node_type == "block_html":
-            # Handle HTML blocks (for HTML tables when output_tables_as_HTML=True)
             html_content = node.get("raw", "")
             if "<table" in html_content:
-                # Parse HTML table
                 table_data = self._parse_html_table(html_content)
-                # For HTML tables, we want to preserve the raw HTML to keep colspan/rowspan
                 text_raw = html_content 
                 return {
                     "type": "table",
@@ -166,7 +141,6 @@ class MarkdownParser:
                 }
 
         elif node_type == "block_code":
-            # Handle code blocks
             text = node.get("raw", "")
             return {
                 "type": "text",
@@ -176,7 +150,6 @@ class MarkdownParser:
             }
 
         elif node_type == "block_quote":
-            # Handle block quotes
             text = self._get_text_content(node)
             return {
                 "type": "text",
@@ -186,14 +159,11 @@ class MarkdownParser:
             }
 
         elif node_type == "thematic_break":
-            # Handle horizontal rules (---) - skip as they're structural only
             return None
 
         return None
 
     def _get_text_content(self, node: Dict[str, Any]) -> str:
-        """Recursively extract text from node children."""
-        # Mistune 3 uses 'raw' for text content
         if "raw" in node:
             return node["raw"]
         if "text" in node:
@@ -203,7 +173,6 @@ class MarkdownParser:
         return ""
     
     def _parse_html_table(self, html_str: str) -> Dict[str, Any]:
-        """Parse HTML table into structured JSON."""
         try:
             soup = BeautifulSoup(html_str, "html.parser")
             table = soup.find("table")
@@ -211,7 +180,6 @@ class MarkdownParser:
             if not table:
                 return {}
             
-            # Extract headers
             headers = []
             thead = table.find("thead")
             if thead:
@@ -219,11 +187,9 @@ class MarkdownParser:
                 if header_row:
                     headers = [th.get_text(strip=True) for th in header_row.find_all(["th", "td"])]
             
-            # Extract rows
             rows = []
             tbody = table.find("tbody") or table
             for tr in tbody.find_all("tr"):
-                # Skip header rows in tbody
                 if tr.parent.name == "thead":
                     continue
                     
@@ -246,7 +212,6 @@ class MarkdownParser:
             return {"error": str(e)}
 
     def _parse_markdown_table(self, node: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse Mistune Markdown table AST into structured JSON."""
         headers = []
         rows = []
         
@@ -262,7 +227,7 @@ class MarkdownParser:
                     for cell in row.get("children", []):
                         current_row.append({
                             "text": self._get_text_content(cell),
-                            "colspan": 1, # Markdown tables don't support colspan/rowspan standardly
+                            "colspan": 1,
                             "rowspan": 1
                         })
                     rows.append(current_row)
@@ -275,7 +240,6 @@ class MarkdownParser:
         }
 
     def _reconstruct_markdown_table(self, table_data: Dict[str, Any]) -> str:
-        """Reconstruct a Markdown table string from structured table data."""
         headers = table_data.get("headers", [])
         rows = table_data.get("rows", [])
         
@@ -284,26 +248,19 @@ class MarkdownParser:
             
         lines = []
         
-        # 1. Header row
         if headers:
             header_line = "| " + " | ".join(headers) + " |"
             lines.append(header_line)
             
-            # 2. Separator row
             separator_line = "| " + " | ".join(["---"] * len(headers)) + " |"
             lines.append(separator_line)
         
-        # 3. Data rows
         for row in rows:
-            # Row is a list of dicts with 'text' key
             cell_texts = [cell.get("text", "") for cell in row]
             
-            # Handle case where row might have different length than headers (shouldn't happen in valid MD but good for safety)
-            # If headers exist, ensure row matches header count (pad with empty)
             if headers:
                 while len(cell_texts) < len(headers):
                     cell_texts.append("")
-                # Truncate if too long? Or just let it be. MD tables are flexible.
             
             row_line = "| " + " | ".join(cell_texts) + " |"
             lines.append(row_line)

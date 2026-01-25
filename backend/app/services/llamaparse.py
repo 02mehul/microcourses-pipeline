@@ -3,58 +3,27 @@ from llama_parse import LlamaParse
 from ..config import settings
 
 
-
 class LlamaParseService:
     def __init__(self):
         self.api_key = settings.LLAMA_CLOUD_API_KEY
         if not self.api_key or self.api_key == "llx-...":
             raise ValueError("LLAMA_CLOUD_API_KEY is not set")
 
-        # Get OpenAI API key for multimodal parsing (chart extraction)
-        # self.openai_api_key = settings.OPENAI_API_KEY
-
-        # GPT-4o VISION MODE - Best for chart/graph data extraction
-        # Uses OpenAI's GPT-4o for superior visual understanding of charts
-        # Region configuration - uncomment the appropriate one for your API key:
-        # US (default): https://api.cloud.llamaindex.ai
-        # EU: https://api.cloud.llamaindex.ai/eu
-        
         self.parser = LlamaParse(
-            api_key="llx-CGSsDhPcsm9VEblAxyTuKvbemleCSWItxnK2I1BNnwYgSO95",
+            api_key=self.api_key,
             result_type="markdown",
-            
-            # Use document-level LVM for better cross-page context
             parse_mode="parse_document_with_lvm",
             use_vendor_multimodal_model=True,
-
-            # CRITICAL: Use GPT-4o for multimodal parsing (best for charts)
-            # use_vendor_multimodal_model=True,
-            # vendor_multimodal_model_name="openai-gpt-5-nano",
-            # vendor_multimodal_api_key=self.openai_api_key,
-            
-            # Enable chart extraction
             extract_charts=True,
-            
-            # Enable layout/figure extraction
             extract_layout=True,
-            
-            # Enhanced extraction features
-            high_res_ocr=True,  # High resolution OCR
-            adaptive_long_table=True,  # Detect and adapt long tables
-            outlined_table_extraction=True,  # Extract outlined tables
-            output_tables_as_HTML=True,  # Output tables as HTML in markdown
-            
-            # Layout preservation for accurate structure
+            high_res_ocr=True,
+            adaptive_long_table=True,
+            outlined_table_extraction=True,
+            output_tables_as_HTML=True,
             preserve_layout_alignment_across_pages=True,
-            preserve_very_small_text=True,  # Capture small text in charts/legends
-            
-            # Cross-page context preservation
+            preserve_very_small_text=True,
             continuous_mode=True,
-            
-            # Premium accuracy mode
             premium_mode=True,
-            
-            # Parsing instructions for GPT-4o Vision
             parsing_instruction="""
             You are analyzing an academic research document with charts and graphs.
             
@@ -79,25 +48,15 @@ class LlamaParseService:
             
             4. ACCURACY: Double-check all extracted numbers against the visual
             """,
-
-            # Fresh parse
             invalidate_cache=True,
             skip_diagonal_text=False,
             verbose=True,
         )
 
     def parse_pdf(self, file_path: str) -> list:
-        """
-        Parse a document using LlamaParse with maximum accuracy settings.
-        Returns list of Document objects (one per page) with structured markdown.
-
-        Images will be referenced in markdown, tables will be preserved,
-        and hierarchical structure will be clearly marked.
-        """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        # Parse the document with premium accuracy
         documents = self.parser.load_data(file_path)
 
         return documents

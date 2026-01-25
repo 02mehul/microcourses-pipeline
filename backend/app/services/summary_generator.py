@@ -1,16 +1,3 @@
-"""
-Summary Generator Service
-
-Generates visual summaries and analytics from document content using Gemini API.
-Produces:
-- Executive summary
-- Document statistics
-- Key concepts for visualization
-- Topic distribution data
-- Main takeaways
-- Learning objectives
-"""
-
 import json
 import logging
 import os
@@ -24,15 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class SummaryGenerator:
-    """Generates comprehensive document summaries with visual data for charts."""
 
     def __init__(self, api_key: Optional[str] = None):
-        """
-        Initialize SummaryGenerator with Gemini API.
-        
-        Args:
-            api_key: Gemini API key. If not provided, reads from GEMINI_API_KEY env var.
-        """
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not found in environment")
@@ -41,7 +21,6 @@ class SummaryGenerator:
         self.model_id = "gemini-2.0-flash"
 
     def _extract_text_from_blocks(self, blocks: List[Block]) -> str:
-        """Extract all text content from blocks."""
         text_parts = []
         for block in blocks:
             if block.text_raw:
@@ -49,38 +28,26 @@ class SummaryGenerator:
         return "\n\n".join(text_parts)
 
     def _count_words(self, text: str) -> int:
-        """Count words in text."""
         return len(text.split())
 
     def _estimate_reading_time(self, word_count: int) -> int:
-        """Estimate reading time in minutes (average 200 words/minute)."""
         return max(1, round(word_count / 200))
 
     def _count_tables(self, blocks: List[Block]) -> int:
-        """Count number of tables in blocks."""
         return sum(1 for b in blocks if b.type == "table" or b.table_data)
 
     def _count_images(self, blocks: List[Block]) -> int:
-        """Count number of images in blocks."""
         return sum(1 for b in blocks if b.type == "figure" or b.image_path)
 
     def calculate_stats(self, blocks: List[Block], page_count: int) -> Dict[str, Any]:
-        """
-        Calculate document statistics.
-        
-        Returns:
-            Dict with word_count, reading_time_minutes, page_count, complexity_score, etc.
-        """
         full_text = self._extract_text_from_blocks(blocks)
         word_count = self._count_words(full_text)
         
-        # Calculate complexity score based on various factors
         avg_words_per_block = word_count / len(blocks) if blocks else 0
         table_count = self._count_tables(blocks)
         image_count = self._count_images(blocks)
         
-        # Complexity heuristics (1-10 scale)
-        complexity = 5.0  # Base complexity
+        complexity = 5.0
         if avg_words_per_block > 100:
             complexity += 1
         if avg_words_per_block > 200:
@@ -104,18 +71,8 @@ class SummaryGenerator:
         }
 
     def generate_executive_summary(self, blocks: List[Block]) -> str:
-        """
-        Generate a concise executive summary of the document.
-
-        Args:
-            blocks: List of document blocks
-
-        Returns:
-            Executive summary string (3-5 sentences)
-        """
         full_text = self._extract_text_from_blocks(blocks)
 
-        # Truncate if too long
         max_chars = 15000
         if len(full_text) > max_chars:
             full_text = full_text[:max_chars] + "..."
@@ -149,12 +106,6 @@ Document content:
             return "Summary generation failed. Please try again."
 
     def extract_key_concepts(self, blocks: List[Block]) -> List[Dict[str, Any]]:
-        """
-        Extract key concepts from the document for visualization.
-
-        Returns:
-            List of dicts with name, importance (0-100), frequency, and optional category
-        """
         full_text = self._extract_text_from_blocks(blocks)
 
         max_chars = 15000
@@ -189,9 +140,7 @@ Document content:
                 )
             )
 
-            # Parse JSON from response
             text = response.text.strip()
-            # Remove markdown code blocks if present
             if text.startswith("```"):
                 text = re.sub(r'^```(?:json)?\n?', '', text)
                 text = re.sub(r'\n?```$', '', text)
@@ -203,9 +152,8 @@ Document content:
                 logger.debug(f"Raw response text: {text}")
                 return []
 
-            # Validate and normalize
             validated = []
-            for c in concepts[:8]:  # Max 8 concepts
+            for c in concepts[:8]:
                 try:
                     validated.append({
                         "name": str(c.get("name", "Unknown"))[:50],
@@ -224,12 +172,6 @@ Document content:
 
 
     def extract_takeaways_and_objectives(self, blocks: List[Block]) -> Dict[str, List[str]]:
-        """
-        Extract main takeaways and learning objectives.
-
-        Returns:
-            Dict with 'takeaways' and 'objectives' lists
-        """
         full_text = self._extract_text_from_blocks(blocks)
 
         max_chars = 15000
@@ -290,31 +232,17 @@ Document content:
             return {"takeaways": [], "objectives": []}
 
     def create_full_summary(self, blocks: List[Block], page_count: int) -> Dict[str, Any]:
-        """
-        Generate a complete document summary with all components.
-        
-        Args:
-            blocks: List of document blocks
-            page_count: Number of pages in document
-            
-        Returns:
-            Dict with all summary data ready for storage
-        """
         logger.info(f"Generating full summary for {len(blocks)} blocks")
         
-        # Calculate statistics first (no API call needed)
         stats = self.calculate_stats(blocks, page_count)
         logger.info(f"Stats calculated: {stats['word_count']} words")
         
-        # Generate executive summary
         executive_summary = self.generate_executive_summary(blocks)
         logger.info("Executive summary generated")
         
-        # Extract key concepts
         key_concepts = self.extract_key_concepts(blocks)
         logger.info(f"Extracted {len(key_concepts)} key concepts")
 
-        # Extract takeaways and objectives
         insights = self.extract_takeaways_and_objectives(blocks)
         logger.info(f"Extracted {len(insights['takeaways'])} takeaways and {len(insights['objectives'])} objectives")
         
@@ -322,7 +250,7 @@ Document content:
             "executive_summary": executive_summary,
             "stats": stats,
             "key_concepts": key_concepts,
-            "topic_distribution": [],  # Deprecated - kept for schema compatibility
+            "topic_distribution": [],
             "main_takeaways": insights["takeaways"],
             "learning_objectives": insights["objectives"]
         }
