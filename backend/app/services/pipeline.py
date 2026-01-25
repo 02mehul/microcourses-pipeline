@@ -43,7 +43,7 @@ def process_document(document_id: int) -> None:
                 llama_service = LlamaParseService()
 
                 parsed_pages = llama_service.parse_pdf(temp_file_path)
-                logger.info(f"✅ LlamaParse returned {len(parsed_pages)} pages")
+                logger.info(f"✅ Parsed {len(parsed_pages)} pages")
 
                 if not parsed_pages:
                     raise Exception("LlamaParse returned no pages. Check API key or file content.")
