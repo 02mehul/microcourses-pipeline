@@ -13,9 +13,8 @@ The system automatically:
 
 1. Extracts **text**, **graphics**, **charts** and **tables** from uploaded PDFs.
 2. Converts the extracted data into a **standardized structured format**.
-3. Generates **expressive, learning-oriented summaries** using **LLM models (Ollama / Mistral)**.
-4. Prepares the content for micro-course slides (PowerPoint-like).
-5. Manages and reviews course sections through a clean **web interface**.
+3. Prepares the content for micro-course slides (PowerPoint-like).
+4. Manages and reviews course sections through a clean **web interface**.
 
 ---
 
@@ -39,7 +38,6 @@ docker-compose up --build
 # - Backend API: http://localhost:8000
 # - API Documentation: http://localhost:8000/docs
 # - Frontend UI: http://localhost:3000
-# - MinIO Console: http://localhost:9001 (credentials: minio / minio123)
 
 # 4. Upload a PDF via the web interface
 # Open http://localhost:3000 in your browser
@@ -57,9 +55,7 @@ curl -X POST "http://localhost:8000/documents" \
 - **Backend** (FastAPI) - Port 8000
 - **Frontend** (Next.js) - Port 3000
 - **PostgreSQL** - Port 5432
-- **MinIO** (S3-compatible storage) - Ports 9000, 9001
 - **Redis** - Port 6379
-- **Ollama** (LLM) - Port 11434
 
 **Stopping the system:**
 
@@ -90,7 +86,7 @@ docker-compose up --build
   - Metadata and layout parsing
 - **Standardization:** Each content block (text, table, figure) is annotated with page & position data.
 - **Chunking:** Groups related text blocks into meaningful course sections.
-- **Summarization:** Uses **Ollama / Mistral models** to produce concise, didactic learning text.
+- **Summarization:** concise, didactic learning text.
 - **Multilingual Support:** Can generate translated summaries or learning content (planned).
 
 ### 🔹 Web Interface
@@ -223,7 +219,7 @@ The backend is a **FastAPI** application that handles document upload, processin
 1. **Upload** - Document uploaded via API and stored in MinIO
 2. **Text Extraction** - Content extracted from PDF (text, tables, charts)
 3. **Parsing** - Raw content parsed into structured blocks
-4. **Slide Generation** - Slides created from content blocks using LLM
+4. **Slide Generation** - Slides created from content blocks 
 5. **Quiz Generation** - Review questions generated per subchapter
 6. **Summary** - Document summary and insights created
 
