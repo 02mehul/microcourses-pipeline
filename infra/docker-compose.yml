@@ -29,53 +29,27 @@ services:
     volumes:
       - minio_data:/data
 
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    # you'll run: `docker exec -it <ollama> ollama pull llama3` once
-
   backend:
-    build: ../backend
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     depends_on:
       - postgres
       - minio
-      - redis
     environment:
       DATABASE_URL: postgresql+psycopg2://mcourses:mcourses@postgres:5432/mcourses
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123
       MINIO_BUCKET: documents
-      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
-
-  worker:
-    build: ../worker
-    depends_on:
-      - backend
-      - redis
-      - postgres
-      - minio
-      - ollama
-    environment:
-      DATABASE_URL: postgresql+psycopg2://mcourses:mcourses@postgres:5432/mcourses
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minio
-      MINIO_SECRET_KEY: minio123
-      MINIO_BUCKET: documents
-      REDIS_URL: redis://redis:6379/0
-      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      # Mount docs directory to access parsed markdown files from host
+      - ../backend/docs:/app/docs
+    env_file:
+      - ../backend/.env
 
 volumes:
   pgdata:
   minio_data:
-  ollama_data:
